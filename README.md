@@ -8,7 +8,7 @@ zu bauen und darauf umzustellen.
 
 ```yaml
 settings:
-  base: ghcr.io/nomira-os/nomira-image:2026.11.13
+  base: ghcr.io/nomira-os/nomira-image:0.1.0
 ```
 
 ## Inhalt
@@ -38,9 +38,9 @@ Alles, was den Inhalt bestimmt, steht in `versions.env`:
 | `BOOTC_REF` | Git-Tag von bootc |
 | `NOMIRA_CLI_REF` | Git-Ref von nomira-cli; leer lässt die CLI weg |
 
-Das Image wird nur unter dem Snapshot-Datum veröffentlicht, etwa
-`ghcr.io/nomira-os/nomira-image:2026.11.13`. Einen Tag `latest` gibt es
-bewusst nicht.
+Releases werden als `<Version>` und zusätzlich als
+`<Version>-<Snapshot-Datum>` veröffentlicht, etwa `0.2.0` und
+`0.2.0-2026.11.13`. Einen Tag `latest` gibt es bewusst nicht.
 
 Die mirrorlist im Image zeigt auf denselben Snapshot. Ein `pacman -S` in
 einem Recipe installiert deshalb aus demselben Paketstand wie das
@@ -59,14 +59,20 @@ selbst etwas anderes festlegt. Eigene Profile legt ein Recipe nach
 bootc selbst braucht dafür keine eigene Unterstützung. Anders als SELinux
 arbeitet AppArmor mit Pfaden statt mit Markierungen an den Dateien.
 
-## CI
+## CI und Releases
 
-`.github/workflows/build.yml` baut bei jedem Push auf `main` und
-veröffentlicht nach ghcr. Montags baut ein geplanter Lauf mit dem
-Snapshot vom Vortag; erst wenn dieser Build durchgelaufen und
-veröffentlicht ist, schreibt er das neue Datum nach `versions.env`.
-Ein bestimmtes Datum lässt sich über „Run workflow“ von Hand bauen.
+- **Jeder Commit auf `main`** wird gebaut und als unveränderlicher
+  Entwicklungsstand `sha-<commit>` veröffentlicht.
+- **Releases** entstehen von Hand: im Actions-Tab den Workflow „release“
+  starten und `beta` oder `final` wählen. Version und Changelog ergeben
+  sich aus den Conventional Commits, siehe
+  [Nomira-OS/ci](https://github.com/Nomira-OS/ci).
+- **Neuer Snapshot:** Montags prüft der Workflow „snapshot“, ob das Image
+  mit dem Snapshot vom Vortag baut, und schreibt das Datum dann als
+  `fix:`-Commit nach `versions.env`. Veröffentlicht wird dabei nichts;
+  das nächste Release nimmt den neuen Stand mit.
 
+Alle Images sind mit cosign signiert und tragen einen Herkunftsnachweis.
 Der Build endet mit `bootc container lint`. Einen Boot-Test in einer VM
 gibt es in der CI noch nicht.
 
@@ -93,8 +99,9 @@ podman build -f Containerfile \
   der laufenden Maschine gefüllt wird. Dateien fürs Image gehören nach
   `/usr` und `/etc`.
 
-## Herkunft
+## Lizenz und Herkunft
 
+EUPL-1.2, siehe `LICENSES/`; die Angaben je Datei stehen in `REUSE.toml`.
 Die Schritte, die Arch mit bootc bootfähig machen, stammen aus
-[bootcrew/mono](https://github.com/bootcrew/mono) (Apache-2.0), siehe
-`NOTICE`.
+[bootcrew/mono](https://github.com/bootcrew/mono) (Apache-2.0). Das
+`Containerfile` steht deshalb unter beiden Lizenzen, siehe `NOTICE`.

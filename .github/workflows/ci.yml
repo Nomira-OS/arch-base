@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: Nomira-OS/ci/.github/workflows/checks.yml@main
+
+  versions:
+    runs-on: ubuntu-26.04
+    outputs:
+      build-args: ${{ steps.v.outputs.build-args }}
+      snapshot-tag: ${{ steps.v.outputs.snapshot-tag }}
+      sha-tag: ${{ steps.v.outputs.sha-tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: v
+        run: |
+          . ./versions.env
+          {
+            echo "build-args<<EOF_ARGS"
+            cat versions.env
+            echo "EOF_ARGS"
+            echo "snapshot-tag=$(echo "$SNAPSHOT" | tr / .)"
+            echo "sha-tag=sha-$(git rev-parse --short=7 HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+  # Every commit on main is published as an immutable development build,
+  # sha-<commit>. Releases are cut by hand with the release workflow. The
+  # Containerfile ends with `bootc container lint`, so a build that
+  # succeeds has passed it.
+  image:
+    needs: versions
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+      actions: read
+    uses: Nomira-OS/ci/.github/workflows/image.yml@main
+    with:
+      image: ghcr.io/nomira-os/nomira-image
+      build-args: ${{ needs.versions.outputs.build-args }}
+      tags: ${{ needs.versions.outputs.sha-tag }}
+      push: ${{ github.event_name != 'pull_request' }}

@@ -1,0 +1,70 @@
+# Started by hand from the Actions tab.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release channel
+        type: choice
+        options: [beta, final]
+        default: beta
+      dry-run:
+        description: Only show version and changelog
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: Nomira-OS/ci/.github/workflows/checks.yml@main
+
+  versions:
+    runs-on: ubuntu-26.04
+    outputs:
+      build-args: ${{ steps.v.outputs.build-args }}
+      snapshot-tag: ${{ steps.v.outputs.snapshot-tag }}
+      sha-tag: ${{ steps.v.outputs.sha-tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: v
+        run: |
+          . ./versions.env
+          {
+            echo "build-args<<EOF_ARGS"
+            cat versions.env
+            echo "EOF_ARGS"
+            echo "snapshot-tag=$(echo "$SNAPSHOT" | tr / .)"
+            echo "sha-tag=sha-$(git rev-parse --short=7 HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: [checks, versions]
+    permissions:
+      contents: write
+    uses: Nomira-OS/ci/.github/workflows/release.yml@main
+    with:
+      channel: ${{ inputs.channel }}
+      dry-run: ${{ inputs.dry-run }}
+
+  # Published as <version> and as <version>-<snapshot date>, so the tag also
+  # shows which Arch Linux Archive snapshot the image contains.
+  image:
+    needs: [versions, release]
+    if: ${{ !inputs.dry-run }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+      actions: read
+    uses: Nomira-OS/ci/.github/workflows/image.yml@main
+    with:
+      image: ghcr.io/nomira-os/nomira-image
+      build-args: ${{ needs.versions.outputs.build-args }}
+      tags: |
+        ${{ needs.release.outputs.version }}
+        ${{ needs.release.outputs.version }}-${{ needs.versions.outputs.snapshot-tag }}

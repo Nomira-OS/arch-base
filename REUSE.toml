@@ -1,0 +1,14 @@
+version = 1
+
+[[annotations]]
+path = "**"
+SPDX-FileCopyrightText = "Contributors to nomira"
+SPDX-License-Identifier = "EUPL-1.2"
+
+# The bootc-on-Arch steps in the Containerfile are adapted from
+# bootcrew/mono (Apache-2.0), see NOTICE.
+[[annotations]]
+path = "Containerfile"
+precedence = "override"
+SPDX-FileCopyrightText = ["Contributors to nomira", "2025 tulilirockz"]
+SPDX-License-Identifier = "EUPL-1.2 AND Apache-2.0"

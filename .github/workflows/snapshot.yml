@@ -1,0 +1,75 @@
+# Moves the image to a newer Arch Linux Archive snapshot. The new date is
+# committed only if the image builds with it. Nothing is published: the
+# next release picks the snapshot up.
+name: snapshot
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"   # Mondays
+  workflow_dispatch:
+    inputs:
+      snapshot:
+        description: "Archive date (YYYY/MM/DD); empty means yesterday"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-26.04
+    outputs:
+      snapshot: ${{ steps.p.outputs.snapshot }}
+      changed: ${{ steps.p.outputs.changed }}
+      build-args: ${{ steps.p.outputs.build-args }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: p
+        env:
+          INPUT_SNAPSHOT: ${{ inputs.snapshot }}
+        run: |
+          . ./versions.env
+          # Yesterday: today's archive snapshot may still be incomplete.
+          new="${INPUT_SNAPSHOT:-$(date -u -d yesterday +%Y/%m/%d)}"
+          [ "$new" = "$SNAPSHOT" ] && changed=false || changed=true
+          sed -i "s|^SNAPSHOT=.*|SNAPSHOT=$new|" versions.env
+          {
+            echo "snapshot=$new"
+            echo "changed=$changed"
+            echo "build-args<<EOF_ARGS"
+            cat versions.env
+            echo "EOF_ARGS"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.changed == 'true'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+      actions: read
+    uses: Nomira-OS/ci/.github/workflows/image.yml@main
+    with:
+      image: ghcr.io/nomira-os/nomira-image
+      build-args: ${{ needs.plan.outputs.build-args }}
+      tags: snapshot-test
+      push: false
+
+  commit:
+    needs: [plan, build]
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - env:
+          SNAPSHOT: ${{ needs.plan.outputs.snapshot }}
+        run: |
+          sed -i "s|^SNAPSHOT=.*|SNAPSHOT=$SNAPSHOT|" versions.env
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: move to Arch snapshot $SNAPSHOT" versions.env
+          git push

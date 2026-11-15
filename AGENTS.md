@@ -18,7 +18,9 @@ Sibling repositories: `nomira` (BuildKit frontend), `nomira-cli`,
   snapshot), `bootc-build`, `cli-build`, `system`.
 - `versions.env`: everything that determines the content.
 - `files/`: files copied into the image.
-- `.github/workflows/build.yml`: build, publish, weekly snapshot bump.
+- `.github/workflows/`: `ci` (build and publish `sha-<commit>`),
+  `release` (manual, beta or final), `snapshot` (weekly snapshot bump).
+  All three call the shared workflows in `Nomira-OS/ci`.
 
 ## Build
 
@@ -45,10 +47,15 @@ and takes around 20 minutes without cache.
   the image so recipes on top install from the same state. Do not add
   package sources that bypass the snapshot.
 - **Never use `latest`,** neither for images consumed here nor as a
-  published tag. The image is tagged with the snapshot date only. GitHub
-  Actions are pinned to a commit SHA with the version as a trailing
-  comment. Renovate updates `BOOTC_REF`, `NOMIRA_CLI_REF`, actions and
-  digests; the scheduled workflow, not Renovate, moves `SNAPSHOT`.
+  published tag. Renovate updates `BOOTC_REF`, `NOMIRA_CLI_REF`, actions
+  and digests; the `snapshot` workflow, not Renovate, moves `SNAPSHOT`.
+- **Conventional Commits** for every commit. Version and changelog are
+  derived from them; a change to what ends up in the image is at least a
+  `fix:`. Releases are cut by hand with the `release` workflow and are
+  published as `<version>` and `<version>-<snapshot date>`; never push a
+  tag yourself.
+- **Licence:** EUPL-1.2 via `REUSE.toml`; the Containerfile is
+  `EUPL-1.2 AND Apache-2.0` because of the bootcrew/mono steps.
 - **`/var` is not part of the image.** Pacman's database and cache live
   under `/usr/lib/sysimage`. Image content goes to `/usr` and `/etc`.
 - **bootc is built without its `selinux` feature,** because Arch has no
