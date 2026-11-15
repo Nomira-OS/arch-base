@@ -1,82 +1,85 @@
 # nomira-image
 
-> **Alpha.** Inhalt und Aufbau des Images können sich noch ändern.
+> **Alpha.** Content and layout of the image may still change.
 
-Das Basis-Image für nomira-Recipes: das kleinste Arch Linux, das bootc
-booten kann, dazu die Werkzeuge, um auf der Maschine selbst nomira-Images
-zu bauen und darauf umzustellen.
+The base image for nomira recipes: the smallest Arch Linux that bootc
+can boot, plus the tools to build nomira images on the machine itself
+and switch to them.
 
 ```yaml
 settings:
-  base: ghcr.io/nomira-os/nomira-image:0.1.0
+  base: ghcr.io/nomira-os/nomira-image:TAG
 ```
 
-## Inhalt
+No release has been published yet. Until then only development builds
+`sha-<commit>` exist, see
+[Packages](https://github.com/orgs/Nomira-OS/packages).
 
-| Zweck | Pakete |
+## Content
+
+| Purpose | Packages |
 |---|---|
-| Grundsystem | `base` |
-| Booten mit bootc | `linux`, `dracut`, `ostree`, bootc (aus dem Quelltext gebaut) |
+| Base system | `base` |
+| Booting with bootc | `linux`, `dracut`, `ostree`, bootc (built from source) |
 | `bootc install` | `skopeo`, `bubblewrap`, `btrfs-progs`, `e2fsprogs`, `dosfstools` |
-| Absicherung | `apparmor`, beim Start aktiv |
-| nomira-Werkzeuge | `podman`, `passt`, `buildkit`, `sudo`, die nomira-CLI |
+| Hardening | `apparmor`, active at boot |
+| nomira tools | `podman`, `passt`, `buildkit`, `sudo`, the nomira CLI |
 
-Bewusst nicht enthalten: Netzwerkverwaltung, Firmware, SSH, Desktop und
-der Boot-Test mit bcvk (er bräuchte QEMU). Das wählt das Recipe.
+Deliberately not included: network management, firmware, SSH, a desktop
+and the boot test with bcvk (it would need QEMU). The recipe chooses
+those.
 
-buildkitd läuft als root und nur bei Bedarf: `buildkit.socket` ist
-aktiviert und startet den Daemon, sobald `sudo nomira switch` ihn
-anspricht.
+buildkitd runs as root and only on demand: `buildkit.socket` is enabled
+and starts the daemon as soon as `sudo nomira switch` talks to it.
 
-## Fester Stand
+## Pinned state
 
-Alles, was den Inhalt bestimmt, steht in `versions.env`:
+Everything that determines the content is in `versions.env`:
 
-| Variable | Bedeutung |
+| Variable | Meaning |
 |---|---|
-| `SNAPSHOT` | Datum im Arch Linux Archive (`JJJJ/MM/TT`); legt alle Paketversionen fest |
-| `BOOTC_REF` | Git-Tag von bootc |
-| `NOMIRA_CLI_REF` | Git-Ref von nomira-cli; leer lässt die CLI weg |
+| `SNAPSHOT` | date in the Arch Linux Archive (`YYYY/MM/DD`); fixes all package versions |
+| `BOOTC_REF` | git tag of bootc |
+| `NOMIRA_CLI_REF` | git ref of nomira-cli; empty leaves the CLI out |
 
-Releases werden als `<Version>` und zusätzlich als
-`<Version>-<Snapshot-Datum>` veröffentlicht, etwa `0.2.0` und
-`0.2.0-2026.11.13`. Einen Tag `latest` gibt es bewusst nicht.
+Releases are published as `<version>` and also as
+`<version>-<snapshot date>`, for example `0.2.0` and `0.2.0-2026.11.13`.
+There is deliberately no `latest` tag.
 
-Die mirrorlist im Image zeigt auf denselben Snapshot. Ein `pacman -S` in
-einem Recipe installiert deshalb aus demselben Paketstand wie das
-Basis-Image, ohne dass das Recipe ein Datum kennen muss: Der Tag des
-Basis-Images ist der Paketstand.
+The mirrorlist in the image points to the same snapshot. A `pacman -S`
+in a recipe therefore installs from the same package set as the base
+image, without the recipe having to know a date: the tag of the base
+image is the package set.
 
 ## AppArmor
 
-AppArmor ist im Image aktiv: Die Kernel-Parameter in
-`/usr/lib/bootc/kargs.d/10-apparmor.toml` nehmen es in die `lsm=`-Liste
-auf, und `apparmor.service` lädt beim Start die Profile aus
-`/etc/apparmor.d`. Profile gelten erzwingend, solange ein Profil nicht
-selbst etwas anderes festlegt. Eigene Profile legt ein Recipe nach
-`/etc/apparmor.d`. Prüfen lässt sich der Zustand mit `aa-status`.
+AppArmor is active in the image: the kernel arguments in
+`/usr/lib/bootc/kargs.d/10-apparmor.toml` add it to the `lsm=` list, and
+`apparmor.service` loads the profiles from `/etc/apparmor.d` at boot.
+Profiles are enforced unless a profile says otherwise. A recipe puts its
+own profiles into `/etc/apparmor.d`. `aa-status` shows the state.
 
-bootc selbst braucht dafür keine eigene Unterstützung. Anders als SELinux
-arbeitet AppArmor mit Pfaden statt mit Markierungen an den Dateien.
+bootc itself needs no support for this. Unlike SELinux, AppArmor works
+with paths instead of labels on the files.
 
-## CI und Releases
+## CI and releases
 
-- **Jeder Commit auf `main`** wird gebaut und als unveränderlicher
-  Entwicklungsstand `sha-<commit>` veröffentlicht.
-- **Releases** entstehen von Hand: im Actions-Tab den Workflow „release“
-  starten und `beta` oder `final` wählen. Version und Changelog ergeben
-  sich aus den Conventional Commits, siehe
+- **Every commit on `main`** is built and published as the immutable
+  development build `sha-<commit>`.
+- **Releases** are cut by hand: start the "release" workflow in the
+  Actions tab and choose `beta` or `final`. Version and changelog follow
+  from the Conventional Commits, see
   [Nomira-OS/ci](https://github.com/Nomira-OS/ci).
-- **Neuer Snapshot:** Montags prüft der Workflow „snapshot“, ob das Image
-  mit dem Snapshot vom Vortag baut, und schreibt das Datum dann als
-  `fix:`-Commit nach `versions.env`. Veröffentlicht wird dabei nichts;
-  das nächste Release nimmt den neuen Stand mit.
+- **New snapshot:** on Mondays the "snapshot" workflow checks whether
+  the image builds with the previous day's snapshot and then writes the
+  date to `versions.env` as a `fix:` commit. Nothing is published by
+  that; the next release picks up the new state.
 
-Alle Images sind mit cosign signiert und tragen einen Herkunftsnachweis.
-Der Build endet mit `bootc container lint`. Einen Boot-Test in einer VM
-gibt es in der CI noch nicht.
+All images are signed with cosign and carry a provenance attestation.
+The build ends with `bootc container lint`. CI does not boot the image
+in a VM yet.
 
-## Lokal bauen
+## Building locally
 
 ```sh
 . ./versions.env
@@ -87,34 +90,35 @@ podman build -f Containerfile \
   -t localhost/nomira-image .
 ```
 
-## Erster Start
+## First boot
 
-Das Image legt Sprache, Tastaturbelegung, Zeitzone und root-Passwort
-nicht fest. Beim ersten Start fragt `systemd-firstboot` deshalb auf der
-Konsole danach. Es fragt nur nach dem, was noch offen ist:
+The image does not set locale, keymap, time zone or root password. On
+the first boot `systemd-firstboot` therefore asks for them on the
+console. It only asks for what is still open:
 
-- Ein Recipe, das die Werte nach `/etc` schreibt (`locale.conf`,
-  `vconsole.conf`, `localtime`), bekommt dafür keine Frage.
-- Für unbeaufsichtigte Installationen lassen sich die Werte als
-  systemd-Credentials mitgeben.
-- Der Kernel-Parameter `systemd.firstboot=off` schaltet die Fragen ganz
-  ab, etwa für Tests in einer VM.
+- A recipe that writes the values to `/etc` (`locale.conf`,
+  `vconsole.conf`, `localtime`) gets no question for them.
+- For unattended installations the values can be passed as systemd
+  credentials.
+- The kernel argument `systemd.firstboot=off` turns the questions off
+  entirely, for tests in a VM for instance.
 
-## Hinweise für Recipes
+The prompts have not been tried in a VM yet.
 
-- **Initramfs:** Nach dem Hinzufügen oder Wechseln von Kernel,
-  Kernelmodulen oder früh benötigter Firmware
-  `/usr/libexec/nomira-initramfs` aufrufen.
-- **pacman-Cache:** Er liegt unter `/usr/lib/sysimage/cache/pacman/pkg`,
-  nicht unter `/var`. Ein Cache-Mount muss auf diesen Pfad zeigen.
-- **`/var`, `/opt`, `/usr/local`, `/home`:** Sie gehören nicht zum Image.
-  `/opt`, `/usr/local` und `/home` sind Verweise nach `/var`, das erst auf
-  der laufenden Maschine gefüllt wird. Dateien fürs Image gehören nach
-  `/usr` und `/etc`.
+## Notes for recipes
 
-## Lizenz und Herkunft
+- **Initramfs:** after adding or changing the kernel, kernel modules or
+  firmware that is needed early, call `/usr/libexec/nomira-initramfs`.
+- **pacman cache:** it lives in `/usr/lib/sysimage/cache/pacman/pkg`,
+  not below `/var`. A cache mount must point to this path.
+- **`/var`, `/opt`, `/usr/local`, `/home`:** they are not part of the
+  image. `/opt`, `/usr/local` and `/home` are links into `/var`, which
+  is only filled on the running machine. Files for the image belong in
+  `/usr` and `/etc`.
 
-EUPL-1.2, siehe `LICENSES/`; die Angaben je Datei stehen in `REUSE.toml`.
-Die Schritte, die Arch mit bootc bootfähig machen, stammen aus
-[bootcrew/mono](https://github.com/bootcrew/mono) (Apache-2.0). Das
-`Containerfile` steht deshalb unter beiden Lizenzen, siehe `NOTICE`.
+## Licence and origin
+
+EUPL-1.2, see `LICENSES/`; per-file information is in `REUSE.toml`. The
+steps that make Arch bootable with bootc come from
+[bootcrew/mono](https://github.com/bootcrew/mono) (Apache-2.0). The
+`Containerfile` is therefore under both licences, see `NOTICE`.

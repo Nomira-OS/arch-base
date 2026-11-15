@@ -60,8 +60,8 @@ and takes around 20 minutes without cache.
   under `/usr/lib/sysimage`. Image content goes to `/usr` and `/etc`.
 - **bootc is built without its `selinux` feature,** because Arch has no
   libselinux. AppArmor needs no bootc support.
-- **Languages:** README is German. The Containerfile, comments, commit
-  messages and this file are English.
+- **Language:** everything is English: README, docs, code, comments and
+  commit messages.
 - **Be explicit about what was not verified.** CI lints the image but
   does not boot it. If you could not boot-test a change, say so.
 
