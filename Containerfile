@@ -28,9 +28,13 @@ RUN test -n "$SNAPSHOT" && \
 FROM base AS bootc-build
 ARG BOOTC_REF
 RUN pacman -S --noconfirm --needed make git rust go-md2man ostree glibc pkgconf
+# Arch has no libselinux, so bootc is built without its selinux feature (it
+# then treats SELinux as disabled). Man pages and the integration test
+# binary are left out.
 RUN test -n "$BOOTC_REF" && \
     git clone --depth 1 --branch "$BOOTC_REF" https://github.com/bootc-dev/bootc.git /src && \
-    make -C /src bin install-all DESTDIR=/output
+    make -C /src install install-ostree-hooks DESTDIR=/output DISABLE_DOCS=1 \
+        CARGO_OPTIONS='--no-default-features --features "install-to-disk pre-6.15"'
 
 # --- nomira CLI (optional) ---------------------------------------------------
 FROM base AS cli-build

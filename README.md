@@ -18,8 +18,8 @@ settings:
 | `bootc install` | `skopeo`, `bubblewrap`, `btrfs-progs`, `e2fsprogs`, `dosfstools` |
 | nomira-Werkzeuge | `podman`, `passt`, `buildkit`, `sudo`, optional die nomira-CLI |
 
-Bewusst nicht enthalten: Netzwerkverwaltung, Firmware, SSH, ein
-Bootloader-Menü nach eigenem Geschmack, Desktop. Das wählt das Recipe.
+Bewusst nicht enthalten: Netzwerkverwaltung, Firmware, SSH, Desktop.
+Das wählt das Recipe.
 
 ## Fester Stand
 
