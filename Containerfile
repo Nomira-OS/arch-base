@@ -88,10 +88,14 @@ RUN systemctl enable apparmor.service
 # stack.
 RUN systemctl enable buildkit.socket
 
-# No interactive first-boot prompts; systemd generates the machine-id.
-RUN systemctl mask systemd-firstboot.service && \
-    echo "uninitialized" > /etc/machine-id && \
-    ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+# First boot: /etc/machine-id "uninitialized" makes systemd treat the first
+# start as a first boot. systemd-firstboot then asks on the console for
+# whatever the image leaves open: locale, keymap, time zone and the root
+# password. A recipe that sets these in /etc, or a deployment that passes
+# them as credentials, gets no prompt for them; the kernel argument
+# systemd.firstboot=off turns the prompts off altogether.
+RUN echo "uninitialized" > /etc/machine-id && \
+    rm -f /etc/localtime
 
 # Initramfs with the bootc dracut module, not tied to the build host.
 RUN mkdir -p /usr/lib/dracut/dracut.conf.d && \

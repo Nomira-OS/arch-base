@@ -87,6 +87,19 @@ podman build -f Containerfile \
   -t localhost/nomira-image .
 ```
 
+## Erster Start
+
+Das Image legt Sprache, Tastaturbelegung, Zeitzone und root-Passwort
+nicht fest. Beim ersten Start fragt `systemd-firstboot` deshalb auf der
+Konsole danach. Es fragt nur nach dem, was noch offen ist:
+
+- Ein Recipe, das die Werte nach `/etc` schreibt (`locale.conf`,
+  `vconsole.conf`, `localtime`), bekommt dafür keine Frage.
+- Für unbeaufsichtigte Installationen lassen sich die Werte als
+  systemd-Credentials mitgeben.
+- Der Kernel-Parameter `systemd.firstboot=off` schaltet die Fragen ganz
+  ab, etwa für Tests in einer VM.
+
 ## Hinweise für Recipes
 
 - **Initramfs:** Nach dem Hinzufügen oder Wechseln von Kernel,
