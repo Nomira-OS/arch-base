@@ -1,0 +1,4 @@
+The steps that make Arch Linux bootable with bootc (pacman state under
+/usr/lib/sysimage, dracut configuration, root filesystem layout) are
+adapted from bootcrew/mono, https://github.com/bootcrew/mono,
+Copyright 2025 tulilirockz, licensed under the Apache License, Version 2.0.
