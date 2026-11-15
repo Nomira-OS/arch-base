@@ -15,7 +15,7 @@ Sibling repositories: `nomira` (BuildKit frontend), `nomira-cli`,
 ## Layout
 
 - `Containerfile`: the whole build. Stages: `base` (Arch synced to the
-  snapshot), `bootc-build`, `bcvk-build`, `cli-build`, `system`.
+  snapshot), `bootc-build`, `cli-build`, `system`.
 - `versions.env`: everything that determines the content.
 - `files/`: files copied into the image.
 - `.github/workflows/build.yml`: build, publish, weekly snapshot bump.
@@ -27,7 +27,6 @@ Sibling repositories: `nomira` (BuildKit frontend), `nomira-cli`,
 podman build -f Containerfile \
   --build-arg SNAPSHOT="$SNAPSHOT" \
   --build-arg BOOTC_REF="$BOOTC_REF" \
-  --build-arg BCVK_REF="$BCVK_REF" \
   --build-arg NOMIRA_CLI_REF="$NOMIRA_CLI_REF" \
   -t localhost/nomira-image .
 ```
@@ -39,8 +38,8 @@ and takes around 20 minutes without cache.
 
 - **Minimalism is the point.** Do not add a package unless bootc cannot
   boot or install without it, or it belongs to the nomira toolchain.
-  The boot test (bcvk with QEMU, virtiofsd and openssh) counts as
-  toolchain. Network management, firmware and desktops belong in recipes.
+  Network management, firmware, ssh, desktops and the bcvk boot test
+  (it needs QEMU) belong in recipes.
 - **Everything is pinned in `versions.env`.** `SNAPSHOT` is an Arch Linux
   Archive date and fixes all package versions; the mirrorlist stays in
   the image so recipes on top install from the same state. Do not add
@@ -48,7 +47,7 @@ and takes around 20 minutes without cache.
 - **Never use `latest`,** neither for images consumed here nor as a
   published tag. The image is tagged with the snapshot date only. GitHub
   Actions are pinned to a commit SHA with the version as a trailing
-  comment. Renovate updates `BOOTC_REF`, `BCVK_REF`, `NOMIRA_CLI_REF`, actions and
+  comment. Renovate updates `BOOTC_REF`, `NOMIRA_CLI_REF`, actions and
   digests; the scheduled workflow, not Renovate, moves `SNAPSHOT`.
 - **`/var` is not part of the image.** Pacman's database and cache live
   under `/usr/lib/sysimage`. Image content goes to `/usr` and `/etc`.

@@ -20,11 +20,13 @@ settings:
 | `bootc install` | `skopeo`, `bubblewrap`, `btrfs-progs`, `e2fsprogs`, `dosfstools` |
 | Absicherung | `apparmor`, beim Start aktiv |
 | nomira-Werkzeuge | `podman`, `passt`, `buildkit`, `sudo`, die nomira-CLI |
-| Boot-Test | bcvk (aus dem Quelltext gebaut), `qemu-base`, `virtiofsd`, `openssh` |
 
-Bewusst nicht enthalten: Netzwerkverwaltung, Firmware, Desktop. Das wählt
-das Recipe. `openssh` ist installiert, weil der Boot-Test es braucht;
-`sshd` ist nicht aktiviert.
+Bewusst nicht enthalten: Netzwerkverwaltung, Firmware, SSH, Desktop und
+der Boot-Test mit bcvk (er bräuchte QEMU). Das wählt das Recipe.
+
+buildkitd läuft als root und nur bei Bedarf: `buildkit.socket` ist
+aktiviert und startet den Daemon, sobald `sudo nomira switch` ihn
+anspricht.
 
 ## Fester Stand
 
@@ -34,7 +36,6 @@ Alles, was den Inhalt bestimmt, steht in `versions.env`:
 |---|---|
 | `SNAPSHOT` | Datum im Arch Linux Archive (`JJJJ/MM/TT`); legt alle Paketversionen fest |
 | `BOOTC_REF` | Git-Tag von bootc |
-| `BCVK_REF` | Git-Tag von bcvk |
 | `NOMIRA_CLI_REF` | Git-Ref von nomira-cli; leer lässt die CLI weg |
 
 Das Image wird nur unter dem Snapshot-Datum veröffentlicht, etwa
@@ -76,7 +77,6 @@ gibt es in der CI noch nicht.
 podman build -f Containerfile \
   --build-arg SNAPSHOT="$SNAPSHOT" \
   --build-arg BOOTC_REF="$BOOTC_REF" \
-  --build-arg BCVK_REF="$BCVK_REF" \
   --build-arg NOMIRA_CLI_REF="$NOMIRA_CLI_REF" \
   -t localhost/nomira-image .
 ```
