@@ -10,7 +10,9 @@
 #   BOOTC_REF       bootc git tag, built from source
 #   NOMIRA_CLI_REF  nomira-cli git ref; empty leaves the CLI out
 
-ARG ARCH_IMAGE=docker.io/archlinux/archlinux:latest
+# `base` is a moving tag; Renovate pins it to a digest. The package state
+# does not depend on it, because the base stage syncs to SNAPSHOT.
+ARG ARCH_IMAGE=docker.io/archlinux/archlinux:base
 
 # --- base: Arch synced to the archive snapshot ------------------------------
 FROM ${ARCH_IMAGE} AS base
@@ -63,13 +65,21 @@ RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | \
     sed -i -e "/= *\/var/ s/^#//" -e "s@= */var@= /usr/lib/sysimage@g" /etc/pacman.conf
 
 # What bootc needs to boot and install (kernel, initramfs, ostree, skopeo,
-# bubblewrap, filesystem tools), then the nomira toolchain. Nothing else:
-# no network manager, no firmware, no ssh. Recipes add those.
+# bubblewrap, filesystem tools), AppArmor, then the nomira toolchain.
+# Nothing else: no network manager, no firmware, no ssh. Recipes add those.
 RUN pacman -S --noconfirm --needed \
         base linux dracut ostree skopeo bubblewrap \
         btrfs-progs e2fsprogs dosfstools \
+        apparmor \
         podman passt buildkit sudo && \
     pacman -Scc --noconfirm
+
+# AppArmor: the kernel only activates it when it is named in the lsm= list
+# (Arch's default list plus apparmor), and apparmor.service loads the
+# profiles from /etc/apparmor.d at boot. Profiles are enforcing unless a
+# profile itself says otherwise.
+COPY files/10-apparmor.toml /usr/lib/bootc/kargs.d/10-apparmor.toml
+RUN systemctl enable apparmor.service
 
 # No interactive first-boot prompts; systemd generates the machine-id.
 RUN systemctl mask systemd-firstboot.service && \

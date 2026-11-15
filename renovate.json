@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    "docker:pinDigests"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "bootc tag in versions.env",
+      "managerFilePatterns": ["/^versions\\.env$/"],
+      "matchStrings": ["BOOTC_REF=(?<currentValue>\\S+)"],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "bootc-dev/bootc"
+    },
+    {
+      "customType": "regex",
+      "description": "nomira-cli commit in versions.env, following main",
+      "managerFilePatterns": ["/^versions\\.env$/"],
+      "matchStrings": ["NOMIRA_CLI_REF=(?<currentDigest>[a-f0-9]{40})"],
+      "currentValueTemplate": "main",
+      "datasourceTemplate": "git-refs",
+      "depNameTemplate": "nomira-cli",
+      "packageNameTemplate": "https://github.com/Nomira-OS/nomira-cli"
+    }
+  ]
+}

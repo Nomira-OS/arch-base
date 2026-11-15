@@ -24,13 +24,13 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 90
     permissions:
       contents: write   # the scheduled run commits the new snapshot date
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Resolve versions
         id: v
@@ -58,8 +58,8 @@ jobs:
             echo "cli=$NOMIRA_CLI_REF"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         if: github.event_name != 'pull_request'
         with:
           registry: ghcr.io
@@ -68,7 +68,7 @@ jobs:
 
       # The Containerfile ends with `bootc container lint`, so a build that
       # succeeds has passed it.
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: Containerfile
@@ -78,9 +78,8 @@ jobs:
             SNAPSHOT=${{ steps.v.outputs.snapshot }}
             BOOTC_REF=${{ steps.v.outputs.bootc }}
             NOMIRA_CLI_REF=${{ steps.v.outputs.cli }}
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.v.outputs.tag }}
-            ${{ env.IMAGE }}:latest
+          # The snapshot date is the only tag; there is deliberately no `latest`.
+          tags: ${{ env.IMAGE }}:${{ steps.v.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

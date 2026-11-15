@@ -16,7 +16,8 @@ settings:
 | Grundsystem | `base` |
 | Booten mit bootc | `linux`, `dracut`, `ostree`, bootc (aus dem Quelltext gebaut) |
 | `bootc install` | `skopeo`, `bubblewrap`, `btrfs-progs`, `e2fsprogs`, `dosfstools` |
-| nomira-Werkzeuge | `podman`, `passt`, `buildkit`, `sudo`, optional die nomira-CLI |
+| Absicherung | `apparmor`, beim Start aktiv |
+| nomira-Werkzeuge | `podman`, `passt`, `buildkit`, `sudo`, die nomira-CLI |
 
 Bewusst nicht enthalten: Netzwerkverwaltung, Firmware, SSH, Desktop.
 Das wählt das Recipe.
@@ -31,13 +32,26 @@ Alles, was den Inhalt bestimmt, steht in `versions.env`:
 | `BOOTC_REF` | Git-Tag von bootc |
 | `NOMIRA_CLI_REF` | Git-Ref von nomira-cli; leer lässt die CLI weg |
 
-Das Image wird unter dem Snapshot-Datum veröffentlicht, etwa
-`ghcr.io/nomira-os/nomira-image:2026.11.13`, zusätzlich als `latest`.
+Das Image wird nur unter dem Snapshot-Datum veröffentlicht, etwa
+`ghcr.io/nomira-os/nomira-image:2026.11.13`. Einen Tag `latest` gibt es
+bewusst nicht.
 
 Die mirrorlist im Image zeigt auf denselben Snapshot. Ein `pacman -S` in
 einem Recipe installiert deshalb aus demselben Paketstand wie das
 Basis-Image, ohne dass das Recipe ein Datum kennen muss: Der Tag des
 Basis-Images ist der Paketstand.
+
+## AppArmor
+
+AppArmor ist im Image aktiv: Die Kernel-Parameter in
+`/usr/lib/bootc/kargs.d/10-apparmor.toml` nehmen es in die `lsm=`-Liste
+auf, und `apparmor.service` lädt beim Start die Profile aus
+`/etc/apparmor.d`. Profile gelten erzwingend, solange ein Profil nicht
+selbst etwas anderes festlegt. Eigene Profile legt ein Recipe nach
+`/etc/apparmor.d`. Prüfen lässt sich der Zustand mit `aa-status`.
+
+bootc selbst braucht dafür keine eigene Unterstützung. Anders als SELinux
+arbeitet AppArmor mit Pfaden statt mit Markierungen an den Dateien.
 
 ## CI
 
