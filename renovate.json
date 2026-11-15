@@ -16,6 +16,14 @@
     },
     {
       "customType": "regex",
+      "description": "bcvk tag in versions.env",
+      "managerFilePatterns": ["/^versions\\.env$/"],
+      "matchStrings": ["BCVK_REF=(?<currentValue>\\S+)"],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "bootc-dev/bcvk"
+    },
+    {
+      "customType": "regex",
       "description": "nomira-cli commit in versions.env, following main",
       "managerFilePatterns": ["/^versions\\.env$/"],
       "matchStrings": ["NOMIRA_CLI_REF=(?<currentDigest>[a-f0-9]{40})"],

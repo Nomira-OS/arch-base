@@ -55,6 +55,7 @@ jobs:
             echo "snapshot=$SNAPSHOT"
             echo "tag=$(echo "$SNAPSHOT" | tr / .)"
             echo "bootc=$BOOTC_REF"
+            echo "bcvk=$BCVK_REF"
             echo "cli=$NOMIRA_CLI_REF"
           } >> "$GITHUB_OUTPUT"
 
@@ -77,6 +78,7 @@ jobs:
           build-args: |
             SNAPSHOT=${{ steps.v.outputs.snapshot }}
             BOOTC_REF=${{ steps.v.outputs.bootc }}
+            BCVK_REF=${{ steps.v.outputs.bcvk }}
             NOMIRA_CLI_REF=${{ steps.v.outputs.cli }}
           # The snapshot date is the only tag; there is deliberately no `latest`.
           tags: ${{ env.IMAGE }}:${{ steps.v.outputs.tag }}

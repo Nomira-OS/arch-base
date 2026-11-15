@@ -8,6 +8,7 @@
 # Everything is pinned through build args (see versions.env):
 #   SNAPSHOT        Arch Linux Archive date, YYYY/MM/DD: fixes all packages
 #   BOOTC_REF       bootc git tag, built from source
+#   BCVK_REF        bcvk git tag, built from source
 #   NOMIRA_CLI_REF  nomira-cli git ref; empty leaves the CLI out
 
 # `base` is a moving tag; Renovate pins it to a digest. The package state
@@ -38,6 +39,17 @@ RUN test -n "$BOOTC_REF" && \
     make -C /src install install-ostree-hooks DESTDIR=/output DISABLE_DOCS=1 \
         CARGO_OPTIONS='--no-default-features --features "install-to-disk pre-6.15"'
 
+# --- bcvk, built from source ---------------------------------------------------
+# bcvk boots an image in a throwaway VM; `nomira switch` uses it as the boot
+# test. Upstream only publishes Fedora packages.
+FROM base AS bcvk-build
+ARG BCVK_REF
+RUN pacman -S --noconfirm --needed git rust pkgconf openssl
+RUN test -n "$BCVK_REF" && \
+    git clone --depth 1 --branch "$BCVK_REF" https://github.com/bootc-dev/bcvk.git /src && \
+    cd /src && cargo build --release --locked --bin bcvk && \
+    install -D -m 0755 target/release/bcvk /output/usr/bin/bcvk
+
 # --- nomira CLI (optional) ---------------------------------------------------
 FROM base AS cli-build
 ARG NOMIRA_CLI_REF
@@ -55,6 +67,7 @@ ARG SNAPSHOT
 ARG BOOTC_REF
 
 COPY --from=bootc-build /output /
+COPY --from=bcvk-build /output /
 COPY --from=cli-build /output /
 COPY --chmod=0755 files/nomira-initramfs /usr/libexec/nomira-initramfs
 
@@ -65,13 +78,17 @@ RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | \
     sed -i -e "/= *\/var/ s/^#//" -e "s@= */var@= /usr/lib/sysimage@g" /etc/pacman.conf
 
 # What bootc needs to boot and install (kernel, initramfs, ostree, skopeo,
-# bubblewrap, filesystem tools), AppArmor, then the nomira toolchain.
-# Nothing else: no network manager, no firmware, no ssh. Recipes add those.
+# bubblewrap, filesystem tools), AppArmor, then the nomira toolchain. The
+# last line is what bcvk needs for the boot test: QEMU and virtiofsd to run
+# the VM, and openssh, whose client bcvk uses and whose server must exist in
+# the image under test (sshd is installed but not enabled).
+# Nothing else: no network manager, no firmware. Recipes add those.
 RUN pacman -S --noconfirm --needed \
         base linux dracut ostree skopeo bubblewrap \
         btrfs-progs e2fsprogs dosfstools \
         apparmor \
-        podman passt buildkit sudo && \
+        podman passt buildkit sudo \
+        qemu-base virtiofsd openssh && \
     pacman -Scc --noconfirm
 
 # AppArmor: the kernel only activates it when it is named in the lsm= list
