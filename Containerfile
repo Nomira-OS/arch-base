@@ -45,8 +45,12 @@ ARG BOOTC_REF
 RUN nomira-pacman -S --noconfirm --needed make git rust go-md2man ostree glibc pkgconf
 # Arch has no libselinux, so bootc is built without its selinux feature (it
 # then treats SELinux as disabled). Man pages and the integration test
-# binary are left out.
+# binary are left out. bootc's release profile keeps full debug info for
+# distributions that split it off. Kept in the image, it made bootc alone
+# over 400 MB, went into the initramfs with initramfs-setup, and differed
+# between two builds. The binaries are built without it and stripped.
 RUN test -n "$BOOTC_REF" && \
+    export CARGO_PROFILE_RELEASE_DEBUG=false CARGO_PROFILE_RELEASE_STRIP=true && \
     git clone --depth 1 --branch "$BOOTC_REF" https://github.com/bootc-dev/bootc.git /src && \
     make -C /src install install-ostree-hooks DESTDIR=/output DISABLE_DOCS=1 \
         CARGO_OPTIONS='--no-default-features --features "install-to-disk pre-6.15"'
