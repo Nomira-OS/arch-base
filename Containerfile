@@ -54,9 +54,10 @@ FROM base AS system
 ARG SNAPSHOT
 ARG BOOTC_REF
 
-COPY --from=bootc-build /output /
-COPY --from=cli-build /output /
-COPY --chmod=0755 files/nomira-initramfs /usr/libexec/nomira-initramfs
+# Layers are ordered by how often they change: the package set (with each
+# snapshot), then configuration, then bootc (with each bootc release), and
+# the nomira CLI last, because it changes most often. A change rebuilds only
+# its own layer and those after it.
 
 # /var is not part of a bootc image. Keep pacman's database, cache and log
 # under /usr/lib/sysimage so pacman keeps working in builds on top.
@@ -106,12 +107,17 @@ RUN echo "uninitialized" > /etc/machine-id && \
 # runs.
 RUN mkdir -p /usr/lib/composefs && : > /usr/lib/composefs/setup-root-conf.toml
 
-# Initramfs with the bootc dracut module, not tied to the build host.
+# Initramfs configuration: with the bootc dracut module, not tied to the
+# build host.
 RUN mkdir -p /usr/lib/dracut/dracut.conf.d && \
     printf 'systemdsystemconfdir=/etc/systemd/system\nsystemdsystemunitdir=/usr/lib/systemd/system\n' \
         > /usr/lib/dracut/dracut.conf.d/30-nomira-bootc-module.conf && \
     printf 'reproducible=yes\nhostonly=no\ncompress=zstd\nadd_dracutmodules+=" bootc "\n' \
         > /usr/lib/dracut/dracut.conf.d/30-nomira-container-build.conf
+
+# bootc, then the initramfs, which contains bootc's dracut module.
+COPY --from=bootc-build /output /
+COPY --chmod=0755 files/nomira-initramfs /usr/libexec/nomira-initramfs
 RUN --mount=type=tmpfs,target=/tmp --mount=type=tmpfs,target=/root \
     /usr/libexec/nomira-initramfs
 
@@ -130,6 +136,9 @@ RUN sed -i 's|^HOME=.*|HOME=/var/home|' /etc/default/useradd && \
         > /usr/lib/tmpfiles.d/bootc-base-dirs.conf && \
     printf 'd /var/roothome 0700 root root -\nd /run/media 0755 root root -\n' \
         >> /usr/lib/tmpfiles.d/bootc-base-dirs.conf
+
+# The nomira CLI changes most often, so it comes last.
+COPY --from=cli-build /output /
 
 LABEL containers.bootc=1 \
       org.nomira.snapshot="${SNAPSHOT}" \
