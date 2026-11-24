@@ -53,6 +53,15 @@ The date in the tag of `ARCH_IMAGE` is the one date of the image.
 Renovate moves `ARCH_IMAGE` to newer dated images, and with it the
 snapshot.
 
+Releases are published as `<version>` and also as
+`<version>-<snapshot date>`, for example `0.2.0` and `0.2.0-2026.11.13`.
+There is deliberately no `latest` tag.
+
+The mirrorlist in the image points to the same snapshot. A `pacman -S`
+in a recipe therefore installs from the same package set as the base
+image, without the recipe having to know a date: the tag of the base
+image is the package set.
+
 ## Reproducibility
 
 Building the same `versions.env` twice should give the same files:
@@ -93,23 +102,6 @@ same bootc that checks it at boot. A UKI has no `root=` argument; systemd
 finds the root partition by its GPT type, and unlocks it if it is
 encrypted. The initramfs build checks that the generator and the
 cryptsetup and TPM pieces for this are included.
-
-## First boot
-
-The image leaves locale, keymap, time zone and the root password open, so
-systemd-firstboot asks for them on the console at the first boot (root
-is `!unprovisioned`). systemd-homed is active, and
-systemd-homed-firstboot then asks for the first user; members of `wheel`
-may use sudo.
-
-Releases are published as `<version>` and also as
-`<version>-<snapshot date>`, for example `0.2.0` and `0.2.0-2026.11.13`.
-There is deliberately no `latest` tag.
-
-The mirrorlist in the image points to the same snapshot. A `pacman -S`
-in a recipe therefore installs from the same package set as the base
-image, without the recipe having to know a date: the tag of the base
-image is the package set.
 
 ## Boot loader and storage
 
@@ -168,9 +160,11 @@ podman build -f Containerfile \
 
 ## First boot
 
-The image does not set locale, keymap, time zone or root password. On
-the first boot `systemd-firstboot` therefore asks for them on the
-console. It only asks for what is still open:
+The image leaves locale, keymap, time zone and the root password open, so
+`systemd-firstboot` asks for them on the console at the first boot (root
+is `!unprovisioned`, which systemd treats as not set). Then
+`systemd-homed-firstboot` asks for the first user, who is put into
+`wheel`; members of `wheel` may use sudo.
 
 - A recipe that writes the values to `/etc` (`locale.conf`,
   `vconsole.conf`, `localtime`) gets no question for them.
@@ -178,8 +172,6 @@ console. It only asks for what is still open:
   credentials.
 - The kernel argument `systemd.firstboot=off` turns the questions off
   entirely, for tests in a VM for instance.
-
-The prompts have not been tried in a VM yet.
 
 ## Notes for recipes
 
