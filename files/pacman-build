@@ -9,9 +9,10 @@
 #
 # - Keyring: set up in the tmpfs for this one step, so no private key ends
 #   up in a layer. The image ships no keyring; recipes do the same.
-# - Retries: the Arch Linux Archive sometimes answers too slowly. A failed
-#   call is tried again after 30 s and after 90 s; packages already
-#   downloaded stay in the cache.
+# - Slow downloads: the Arch Linux Archive sometimes stalls for longer than
+#   pacman's default timeout, so the timeout is off. A failed call is tried
+#   again after 30 s and after 90 s; packages already downloaded stay in
+#   the cache.
 # - Reproducibility: the install date of every package becomes
 #   SOURCE_DATE_EPOCH, and the pacman log and the package cache are removed.
 set -eu
@@ -27,7 +28,7 @@ pacman-key --populate > /dev/null
 
 status=1
 for wait in 30 90 0; do
-    if pacman "$@"; then
+    if pacman --disable-download-timeout "$@"; then
         status=0
         break
     fi
