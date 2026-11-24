@@ -16,6 +16,20 @@ jobs:
   checks:
     uses: Nomira-OS/ci/.github/workflows/checks.yml@main
 
+  # The example recipes must stay valid for the frontend they name.
+  examples:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Lint the example recipes
+        run: |
+          set -eu
+          for f in examples/*/recipe.yml; do
+            img="$(sed -n '1s/^# syntax=//p' "$f")"
+            echo "== $f ($img)"
+            docker run --rm -v "$PWD/$(dirname "$f"):/recipe:ro" "$img" lint /recipe/recipe.yml
+          done
+
   versions:
     runs-on: ubuntu-26.04
     outputs:

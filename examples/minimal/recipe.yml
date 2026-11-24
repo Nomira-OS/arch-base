@@ -1,0 +1,25 @@
+# syntax=ghcr.io/nomira-os/nomira:sha-5184de4
+#
+# The smallest useful system: the base image plus a network service.
+# Language, keymap, time zone, root password and the first user are
+# asked at the first boot.
+settings:
+  name: mysystem
+  base: ghcr.io/nomira-os/arch-base:sha-15a1ff2
+
+phases:
+  - name: packages
+    collect: >-
+      run --mount=type=tmpfs,target=/etc/pacman.d/gnupg
+      --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg
+      pacman-key --init && pacman-key --populate &&
+      pacman -S --needed --noconfirm ${items}
+
+  - name: features
+    groups:
+      network:
+        packages: [networkmanager]
+        services: [NetworkManager.service]
+
+  - name: services
+    collect: run systemctl enable ${items}

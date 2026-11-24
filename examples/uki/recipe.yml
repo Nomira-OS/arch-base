@@ -1,0 +1,82 @@
+# syntax=ghcr.io/nomira-os/nomira:sha-5184de4
+#
+# A system for a real machine: firmware, network, SSH, an editor, all
+# languages, the recipe itself in /etc/nomira, and a unified kernel image
+# whose initramfs is only rebuilt when the packages boot needs change.
+# See README.md for what to adapt.
+settings:
+  name: mysystem
+  base: ghcr.io/nomira-os/arch-base:sha-15a1ff2
+
+prepare:
+  # The initramfs for the unified kernel image, built from the system after
+  # the phase boot: only when boot changes, and never part of the image.
+  initramfs:
+    from: boot
+    commands:
+      - >-
+        run --mount=type=tmpfs,target=/tmp mkdir /out &&
+        for d in /usr/lib/modules/*/; do k="$(basename "$d")";
+        TMPDIR=/tmp SOURCE_DATE_EPOCH=0 dracut --kver "$k" "/out/$k.img"; done &&
+        sha256sum /out/*.img
+
+phases:
+  # What boot needs: firmware, microcode, anything the initramfs must
+  # contain. The pacman keyring is kept in a BuildKit cache on the build
+  # machine, like the keyring of any Arch system; it never enters the image.
+  - name: boot
+    collect: >-
+      run --mount=type=cache,target=/etc/pacman.d/gnupg,id=pacman-keyring,sharing=locked
+      --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg
+      { [ -s /etc/pacman.d/gnupg/trustdb.gpg ] || pacman-key --init; } &&
+      pacman-key --populate && pacman -S --needed --noconfirm ${items}
+
+  # Everything else: a change here leaves the initramfs alone.
+  - name: packages
+    collect: >-
+      run --mount=type=cache,target=/etc/pacman.d/gnupg,id=pacman-keyring,sharing=locked
+      --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg
+      { [ -s /etc/pacman.d/gnupg/trustdb.gpg ] || pacman-key --init; } &&
+      pacman-key --populate && pacman -S --needed --noconfirm ${items}
+
+  - name: features
+    groups:
+      hardware:
+        # linux-firmware would pull in the firmware for every vendor;
+        # the split packages keep the image, and every build, smaller.
+        boot: [linux-firmware-intel, intel-ucode]
+      network:
+        packages: [networkmanager]
+        services: [NetworkManager.service]
+      ssh:
+        packages: [openssh]
+        services: [sshd.service]
+      editor:
+        packages: [nano]
+      language:
+        packages: [glibc-locales]
+      recipe:
+        - copy recipe.yml /etc/nomira/recipe.yml
+
+  - name: services
+    collect: run systemctl enable ${items}
+
+  # The unified kernel image, as bootc builds a sealed image: take kernel
+  # and initramfs out, then build the UKI from the system without them.
+  - name: kernel
+    groups:
+      out: ["run rm /usr/lib/modules/*/vmlinuz /usr/lib/modules/*/initramfs.img"]
+
+  - name: uki
+    groups:
+      uki:
+        - >-
+          run --mount=type=bind,from=kernel,target=/target
+          --mount=type=bind,from=boot,source=/usr/lib/modules,target=/kernels
+          --mount=type=bind,from=initramfs,source=/out,target=/initramfs
+          --mount=type=tmpfs,target=/tmp
+          mkdir -p /boot/EFI/Linux &&
+          for d in /kernels/*; do k="$(basename "$d")"; mkdir "/tmp/$k" &&
+          cp "$d/vmlinuz" "/tmp/$k/" && cp "/initramfs/$k.img" "/tmp/$k/initramfs.img" &&
+          bootc container ukify --rootfs /target --kernel-dir "/tmp/$k" --erofs-version v1-only --
+          --output "/boot/EFI/Linux/$k.efi"; done

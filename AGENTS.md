@@ -21,6 +21,8 @@ Sibling repositories: `nomira` (BuildKit frontend), `nomira-cli`,
   snapshot date and `SOURCE_DATE_EPOCH` from the tag of `ARCH_IMAGE`.
 - `files/pacman-build`: pacman for the build steps (keyring in a tmpfs,
   retries, reproducible install dates); mounted, not part of the image.
+- `examples/`: example recipes, one directory each; the `examples` CI
+  job lints them with the frontend named in their `# syntax=` line.
 - `files/`: files copied into the image.
 - `.github/workflows/`: `ci` (build and publish `sha-<commit>`),
   `release` (manual, beta or final), `repro` (manual: two builds without

@@ -32,6 +32,11 @@ those.
 buildkitd runs as root and only on demand: `buildkit.socket` is enabled
 and starts the daemon as soon as `sudo nomira build` talks to it.
 
+## Examples
+
+[`examples/`](examples/) holds recipes built on this image, from a minimal
+one to a complete system with a unified kernel image. CI lints them.
+
 ## Pinned state
 
 Everything that determines the content is in `versions.env`:
