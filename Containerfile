@@ -134,9 +134,18 @@ RUN echo "uninitialized" > /etc/machine-id && \
 
 # Users: systemd-homed manages them, so a home can be encrypted (LUKS2 by
 # default, in /home/<user>.home) and is unlocked with the user's password.
-# At the first boot systemd-homed-firstboot asks for the first user.
-# Members of wheel may use sudo, which nomira switch needs. Arch's PAM and NSS configuration already include homed.
+# At the first boot systemd-homed-firstboot asks for the first user; a
+# drop-in puts that user into wheel, whose members may use sudo, which
+# nomira switch needs. The drop-in keeps the unit's own command line and
+# only adds --member-of=wheel. Arch's PAM and NSS configuration already
+# include homed.
 RUN systemctl enable systemd-homed.service systemd-homed-firstboot.service && \
+    unit=/usr/lib/systemd/system/systemd-homed-firstboot.service && \
+    exec="$(sed -n 's/^ExecStart=//p' "$unit")" && \
+    case "$exec" in *"homectl firstboot"*) ;; *) echo "unexpected ExecStart in $unit: $exec" >&2; exit 1 ;; esac && \
+    mkdir -p "$unit.d" && \
+    printf '[Service]\nExecStart=\nExecStart=%s --member-of=wheel\n' "$exec" > "$unit.d/10-nomira-wheel.conf" && \
+    cat "$unit.d/10-nomira-wheel.conf" && \
     printf '%%wheel ALL=(ALL:ALL) ALL\n' > /etc/sudoers.d/10-wheel && \
     chmod 0440 /etc/sudoers.d/10-wheel
 
