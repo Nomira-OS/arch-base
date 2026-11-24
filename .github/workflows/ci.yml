@@ -36,7 +36,7 @@ jobs:
             echo "snapshot-tag=$(echo "$SNAPSHOT" | tr / .)"
             echo "source-date-epoch=$SOURCE_DATE_EPOCH"
             echo "sha-tag=sha-$(git rev-parse --short=7 HEAD)"
-          } >> "$GITHUB_OUTPUT""
+          } >> "$GITHUB_OUTPUT"
 
   # Every commit on main is published as an immutable development build,
   # sha-<commit>. Releases are cut by hand with the release workflow. The

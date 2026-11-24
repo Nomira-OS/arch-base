@@ -41,7 +41,7 @@ jobs:
             echo "snapshot-tag=$(echo "$SNAPSHOT" | tr / .)"
             echo "source-date-epoch=$SOURCE_DATE_EPOCH"
             echo "sha-tag=sha-$(git rev-parse --short=7 HEAD)"
-          } >> "$GITHUB_OUTPUT""
+          } >> "$GITHUB_OUTPUT"
 
   release:
     needs: [checks, versions]
