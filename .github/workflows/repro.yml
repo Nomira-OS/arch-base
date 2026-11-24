@@ -1,0 +1,126 @@
+# Is the image reproducible? Builds it twice from the same commit, without
+# any cache and on two runners, splits both with chunkah as CI does, and
+# compares the files and the layers. Started by hand, and weekly so that a
+# regression shows up without anyone looking.
+name: repro
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        run: [a, b]
+    runs-on: ubuntu-26.04
+    env:
+      # renovate: datasource=docker depName=quay.io/coreos/chunkah
+      CHUNKAH_IMAGE: quay.io/coreos/chunkah:v0.7.1@sha256:71e593421c5de7dcc7c8c5c50e98d3bac572055a76f399f61a491d123c20a523
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: v
+        run: |
+          args="$(sh hack/build-args.sh)"
+          eval "$(printf '%s\n' "$args" | grep -E '^SOURCE_DATE_EPOCH=')"
+          echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" >> "$GITHUB_ENV"
+          {
+            echo "build-args<<EOF_ARGS"
+            printf '%s\n' "$args"
+            echo "EOF_ARGS"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          build-args: ${{ steps.v.outputs.build-args }}
+          no-cache: true
+          outputs: type=oci,dest=${{ runner.temp }}/flat.tar
+      - name: List the files
+        run: |
+          set -eu
+          command -v podman >/dev/null && command -v skopeo >/dev/null || {
+            sudo apt-get update -q && sudo apt-get install -y -q podman skopeo
+          }
+          out="${RUNNER_TEMP}/result"
+          mkdir -p "$out"
+          sudo skopeo copy -q "oci-archive:${RUNNER_TEMP}/flat.tar" containers-storage:localhost/flat:latest
+          rm "${RUNNER_TEMP}/flat.tar"
+          mnt="$(sudo podman image mount localhost/flat:latest)"
+          # Type, mode, owner, size and link target of every entry, then the
+          # content of every regular file. Timestamps are left out here:
+          # chunkah clamps them, and the layer digests below cover them.
+          sudo sh -c "cd '$mnt' && find . -xdev -printf '%y %m %U:%G %s %p -> %l\n' | LC_ALL=C sort" > "$out/files.txt"
+          sudo sh -c "cd '$mnt' && find . -xdev -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum" > "$out/sums.txt"
+          sudo podman image unmount localhost/flat:latest
+          wc -l "$out/files.txt"
+      - name: Split into layers with chunkah
+        run: |
+          set -eu
+          out="${RUNNER_TEMP}/result"
+          CHUNKAH_CONFIG_STR="$(sudo podman inspect localhost/flat:latest)"
+          export CHUNKAH_CONFIG_STR
+          mkdir -p "${RUNNER_TEMP}/chunked"
+          sudo --preserve-env=CHUNKAH_CONFIG_STR,SOURCE_DATE_EPOCH podman run --rm \
+            --mount=type=image,src=localhost/flat:latest,dst=/chunkah \
+            --mount=type=bind,src="${RUNNER_TEMP}/chunked",dst=/out \
+            -e CHUNKAH_CONFIG_STR -e SOURCE_DATE_EPOCH \
+            "$CHUNKAH_IMAGE" \
+            build --max-layers 64 --compressed --output oci:/out/oci -t chunked
+          sudo chown -R "$(id -u):$(id -g)" "${RUNNER_TEMP}/chunked"
+          skopeo inspect --raw "oci:${RUNNER_TEMP}/chunked/oci:chunked" | jq . > "$out/manifest.json"
+          skopeo inspect --raw --config "oci:${RUNNER_TEMP}/chunked/oci:chunked" | jq . > "$out/config.json"
+          jq -r '.rootfs.diff_ids[]' "$out/config.json" > "$out/diff_ids.txt"
+          wc -l "$out/diff_ids.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: repro-${{ matrix.run }}
+          path: ${{ runner.temp }}/result
+          retention-days: 14
+
+  compare:
+    needs: build
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: r
+      - name: Compare the two builds
+        run: |
+          # Report every difference before failing.
+          set +e +o pipefail
+          a=r/repro-a b=r/repro-b
+          report() { printf '%s\n' "$@" | tee -a "$GITHUB_STEP_SUMMARY"; }
+          report "## Reproducibility" ""
+          total=$(wc -l < "$a/diff_ids.txt")
+          same=$(LC_ALL=C comm -12 <(sort "$a/diff_ids.txt") <(sort "$b/diff_ids.txt") | wc -l)
+          report "- Layers: $same of $total identical (uncompressed digests)"
+          files=$(wc -l < "$a/files.txt")
+          report "- Entries in the file system: $files"
+          fail=0
+          if ! cmp -s "$a/files.txt" "$b/files.txt"; then
+            fail=1
+            report "" "### Entries that differ (type, mode, owner, size, link)" '```'
+            diff "$a/files.txt" "$b/files.txt" | head -n 100 | tee -a "$GITHUB_STEP_SUMMARY"
+            report '```'
+          fi
+          if ! cmp -s "$a/sums.txt" "$b/sums.txt"; then
+            fail=1
+            report "" "### Files whose content differs" '```'
+            LC_ALL=C join -1 2 -2 2 <(sort -k2 "$a/sums.txt") <(sort -k2 "$b/sums.txt") |
+              awk '$2 != $3 { print $1 }' | head -n 200 | tee -a "$GITHUB_STEP_SUMMARY"
+            report '```'
+          fi
+          if [ "$same" != "$total" ] || ! cmp -s "$a/diff_ids.txt" "$b/diff_ids.txt"; then
+            fail=1
+            report "" "### Layers that differ" '```'
+            paste "$a/diff_ids.txt" "$b/diff_ids.txt" | awk '$1 != $2 { print NR": "$1" / "$2 }' |
+              tee -a "$GITHUB_STEP_SUMMARY"
+            report '```'
+          fi
+          [ "$fail" = 0 ] && report "" "Both builds are identical."
+          exit "$fail"
