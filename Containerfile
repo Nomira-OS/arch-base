@@ -48,9 +48,11 @@ RUN nomira-pacman -S --noconfirm --needed make git rust go-md2man ostree glibc p
 # binary are left out. bootc's release profile keeps full debug info for
 # distributions that split it off. Kept in the image, it made bootc alone
 # over 400 MB, went into the initramfs with initramfs-setup, and differed
-# between two builds. The binaries are built without it and stripped.
+# between two builds. The binaries are built without it and stripped, and
+# in one codegen unit: with several, bootc still differed between builds.
 RUN test -n "$BOOTC_REF" && \
-    export CARGO_PROFILE_RELEASE_DEBUG=false CARGO_PROFILE_RELEASE_STRIP=true && \
+    export CARGO_PROFILE_RELEASE_DEBUG=false CARGO_PROFILE_RELEASE_STRIP=true \
+        CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 && \
     git clone --depth 1 --branch "$BOOTC_REF" https://github.com/bootc-dev/bootc.git /src && \
     make -C /src install install-ostree-hooks DESTDIR=/output DISABLE_DOCS=1 \
         CARGO_OPTIONS='--no-default-features --features "install-to-disk pre-6.15"'
