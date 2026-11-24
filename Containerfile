@@ -109,6 +109,17 @@ RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
         apparmor \
         podman passt buildkit sudo systemd-ukify sbsigntools
 
+# Arch's dracut package regenerates an initramfs into /boot on every
+# transaction that touches kernels or firmware. In an image that is wasted
+# time and bytes in a layer: the base image builds its own initramfs below,
+# recipes build theirs when and where they need it. Mask those hooks.
+RUN mkdir -p /etc/pacman.d/hooks && \
+    for h in /usr/share/libalpm/hooks/*.hook; do \
+        if grep -qi '^ *Exec *=.*dracut' "$h"; then \
+            ln -sf /dev/null "/etc/pacman.d/hooks/$(basename "$h")" && echo "masked $h"; \
+        fi; \
+    done
+
 # bootc container ukify looks for ukify in PATH. Fail here rather than in a
 # recipe if it, sbsign or dracut is missing; if Arch only ships ukify below
 # /usr/lib/systemd, link it into PATH.
