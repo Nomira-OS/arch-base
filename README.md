@@ -30,7 +30,7 @@ and the boot test with bcvk (it would need QEMU). The recipe chooses
 those.
 
 buildkitd runs as root and only on demand: `buildkit.socket` is enabled
-and starts the daemon as soon as `sudo nomira build` or `nomira upgrade` talks to it.
+and starts the daemon as soon as `sudo nomira build` talks to it.
 
 ## Pinned state
 
