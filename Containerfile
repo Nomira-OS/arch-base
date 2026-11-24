@@ -139,7 +139,7 @@ RUN echo "uninitialized" > /etc/machine-id && \
 # default, in /home/<user>.home) and is unlocked with the user's password.
 # At the first boot systemd-homed-firstboot asks for the first user; a
 # drop-in puts that user into wheel, whose members may use sudo, which
-# nomira switch needs. The drop-in keeps the unit's own command line and
+# nomira build and bootc upgrade need. The drop-in keeps the unit's own command line and
 # only adds --member-of=wheel. Arch's PAM and NSS configuration already
 # include homed.
 RUN systemctl enable systemd-homed.service systemd-homed-firstboot.service && \
