@@ -5,26 +5,34 @@
 #
 # The bootc-on-Arch steps follow bootcrew/mono (Apache-2.0), see NOTICE.
 #
-# Everything is pinned through build args (see versions.env):
-#   SNAPSHOT        Arch Linux Archive date, YYYY/MM/DD: fixes all packages
-#   BOOTC_REF       bootc git tag, built from source
-#   NOMIRA_CLI_REF  nomira-cli git ref; empty leaves the CLI out
-
-# `base` is a moving tag; Renovate pins it to a digest. The package state
-# does not depend on it, because the base stage syncs to SNAPSHOT.
-ARG ARCH_IMAGE=docker.io/archlinux/archlinux:base
+# Everything is pinned through build args; hack/build-args.sh prints them
+# from versions.env:
+#   ARCH_IMAGE         dated Arch Linux image, tag and digest
+#   SNAPSHOT           Arch Linux Archive date of that image, YYYY/MM/DD
+#   SOURCE_DATE_EPOCH  midnight UTC of the same day
+#   BOOTC_REF          bootc git tag, built from source
+#   NOMIRA_CLI_REF     nomira-cli git ref; empty leaves the CLI out
+#
+# Reproducibility: every pacman transaction ends with pacman-normalize, which
+# sets the install dates to SOURCE_DATE_EPOCH and drops the log and the
+# cache; dracut builds a reproducible initramfs from SOURCE_DATE_EPOCH; CI
+# clamps all timestamps to it when it splits the image into layers.
+ARG ARCH_IMAGE
 
 # --- base: Arch synced to the archive snapshot ------------------------------
 FROM ${ARCH_IMAGE} AS base
 ARG SNAPSHOT
+ARG SOURCE_DATE_EPOCH
 # The mirrorlist stays in the final image, so recipes built on top install
 # from the same package state. -Syyuu also downgrades, so the result does not
 # depend on how new ARCH_IMAGE is.
-RUN test -n "$SNAPSHOT" && \
+RUN --mount=type=bind,source=files/pacman-normalize,target=/tmp/pacman-normalize \
+    test -n "$SNAPSHOT" && \
     printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' "$SNAPSHOT" \
         > /etc/pacman.d/mirrorlist && \
     sed -i '/DownloadUser/d' /etc/pacman.conf && \
-    pacman -Syyuu --noconfirm
+    pacman -Syyuu --noconfirm && \
+    sh /tmp/pacman-normalize
 
 # --- bootc, built from source -----------------------------------------------
 FROM base AS bootc-build
@@ -53,6 +61,7 @@ RUN mkdir -p /output/usr/bin && \
 FROM base AS system
 ARG SNAPSHOT
 ARG BOOTC_REF
+ARG SOURCE_DATE_EPOCH
 
 # Layers are ordered by how often they change: the package set (with each
 # snapshot), then configuration, then bootc (with each bootc release), and
@@ -62,19 +71,20 @@ ARG BOOTC_REF
 # /var is not part of a bootc image. Keep pacman's database, cache and log
 # under /usr/lib/sysimage so pacman keeps working in builds on top.
 RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | \
-        xargs -n1 sh -c 'mkdir -p "/usr/lib/sysimage/$(dirname $(echo $1 | sed "s@/var/@@"))" && mv -v "$1" "/usr/lib/sysimage/$(echo "$1" | sed "s@/var/@@")"' '' && \
+        xargs -n1 sh -c '[ -e "$1" ] || exit 0; mkdir -p "/usr/lib/sysimage/$(dirname $(echo $1 | sed "s@/var/@@"))" && mv -v "$1" "/usr/lib/sysimage/$(echo "$1" | sed "s@/var/@@")"' '' && \
     sed -i -e "/= *\/var/ s/^#//" -e "s@= */var@= /usr/lib/sysimage@g" /etc/pacman.conf
 
 # What bootc needs to boot and install (kernel, initramfs, ostree, skopeo,
 # bubblewrap, filesystem tools), AppArmor, then the nomira toolchain.
 # Nothing else: no network manager, no firmware, no ssh, no boot-test VM
 # stack. Recipes add those.
-RUN pacman -S --noconfirm --needed \
+RUN --mount=type=bind,source=files/pacman-normalize,target=/tmp/pacman-normalize \
+    pacman -S --noconfirm --needed \
         base linux dracut ostree skopeo bubblewrap \
         btrfs-progs e2fsprogs dosfstools \
         apparmor \
         podman passt buildkit sudo && \
-    pacman -Scc --noconfirm
+    sh /tmp/pacman-normalize
 
 # AppArmor: the kernel only activates it when it is named in the lsm= list
 # (Arch's default list plus apparmor), and apparmor.service loads the

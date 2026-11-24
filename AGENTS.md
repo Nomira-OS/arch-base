@@ -7,7 +7,7 @@ Guidance for coding agents (and humans) working in this repository.
 The base image for nomira recipes: the smallest Arch Linux that bootc can
 boot, with AppArmor active, plus the tools to build nomira images on the
 machine itself (podman, buildkit, the nomira CLI). Published as
-`ghcr.io/nomira-os/nomira-image:<snapshot date>`.
+`ghcr.io/nomira-os/nomira-image`.
 
 Sibling repositories: `nomira` (BuildKit frontend), `nomira-cli`,
 `nomira-web` (reference recipe and website).
@@ -17,19 +17,19 @@ Sibling repositories: `nomira` (BuildKit frontend), `nomira-cli`,
 - `Containerfile`: the whole build. Stages: `base` (Arch synced to the
   snapshot), `bootc-build`, `cli-build`, `system`.
 - `versions.env`: everything that determines the content.
+  `hack/build-args.sh` turns it into build arguments, deriving the
+  snapshot date and `SOURCE_DATE_EPOCH` from the tag of `ARCH_IMAGE`.
+- `files/pacman-normalize`: run after every pacman transaction.
 - `files/`: files copied into the image.
 - `.github/workflows/`: `ci` (build and publish `sha-<commit>`),
-  `release` (manual, beta or final), `snapshot` (weekly snapshot bump).
-  All three call the shared workflows in `Nomira-OS/ci`.
+  `release` (manual, beta or final). Both call the shared workflows in
+  `Nomira-OS/ci` and split the image into layers with chunkah.
 
 ## Build
 
 ```sh
-. ./versions.env
 podman build -f Containerfile \
-  --build-arg SNAPSHOT="$SNAPSHOT" \
-  --build-arg BOOTC_REF="$BOOTC_REF" \
-  --build-arg NOMIRA_CLI_REF="$NOMIRA_CLI_REF" \
+  $(sh hack/build-args.sh | sed 's/^/--build-arg /') \
   -t localhost/nomira-image .
 ```
 
@@ -42,13 +42,17 @@ and takes around 20 minutes without cache.
   boot or install without it, or it belongs to the nomira toolchain.
   Network management, firmware, ssh, desktops and the bcvk boot test
   (it needs QEMU) belong in recipes.
-- **Everything is pinned in `versions.env`.** `SNAPSHOT` is an Arch Linux
-  Archive date and fixes all package versions; the mirrorlist stays in
-  the image so recipes on top install from the same state. Do not add
-  package sources that bypass the snapshot.
+- **Everything is pinned in `versions.env`, and there is one date.** The
+  date in the tag of `ARCH_IMAGE` is the Arch Linux Archive snapshot and
+  `SOURCE_DATE_EPOCH`; never define either a second time. The mirrorlist
+  stays in the image so recipes on top install from the same state. Do
+  not add package sources that bypass the snapshot.
+- **Reproducibility.** A `RUN` that calls pacman ends with
+  `pacman-normalize`. Order layers by how often they change; the CLI
+  comes last.
 - **Never use `latest`,** neither for images consumed here nor as a
-  published tag. Renovate updates `BOOTC_REF`, `NOMIRA_CLI_REF`, actions
-  and digests; the `snapshot` workflow, not Renovate, moves `SNAPSHOT`.
+  published tag. Renovate updates `ARCH_IMAGE` (tag and digest),
+  `BOOTC_REF`, `NOMIRA_CLI_REF`, actions and digests.
 - **Conventional Commits** for every commit. Version and changelog are
   derived from them; a change to what ends up in the image is at least a
   `fix:`. Releases are cut by hand with the `release` workflow and are

@@ -27,18 +27,21 @@ jobs:
       build-args: ${{ steps.v.outputs.build-args }}
       snapshot-tag: ${{ steps.v.outputs.snapshot-tag }}
       sha-tag: ${{ steps.v.outputs.sha-tag }}
+      source-date-epoch: ${{ steps.v.outputs.source-date-epoch }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: v
         run: |
-          . ./versions.env
+          args="$(sh hack/build-args.sh)"
+          eval "$(printf '%s\n' "$args" | grep -E '^(SNAPSHOT|SOURCE_DATE_EPOCH)=')"
           {
             echo "build-args<<EOF_ARGS"
-            cat versions.env
+            printf '%s\n' "$args"
             echo "EOF_ARGS"
             echo "snapshot-tag=$(echo "$SNAPSHOT" | tr / .)"
+            echo "source-date-epoch=$SOURCE_DATE_EPOCH"
             echo "sha-tag=sha-$(git rev-parse --short=7 HEAD)"
-          } >> "$GITHUB_OUTPUT"
+          } >> "$GITHUB_OUTPUT""
 
   release:
     needs: [checks, versions]
@@ -65,6 +68,9 @@ jobs:
     with:
       image: ghcr.io/nomira-os/nomira-image
       build-args: ${{ needs.versions.outputs.build-args }}
+      source-date-epoch: ${{ needs.versions.outputs.source-date-epoch }}
+      # Per-package layers: an update downloads the packages that changed.
+      chunk-layers: 64
       tags: |
         ${{ needs.release.outputs.version }}
         ${{ needs.release.outputs.version }}-${{ needs.versions.outputs.snapshot-tag }}

@@ -38,9 +38,39 @@ Everything that determines the content is in `versions.env`:
 
 | Variable | Meaning |
 |---|---|
-| `SNAPSHOT` | date in the Arch Linux Archive (`YYYY/MM/DD`); fixes all package versions |
+| `ARCH_IMAGE` | dated Arch Linux image, such as `archlinux:base-20261122.0.629543`, pinned by digest |
 | `BOOTC_REF` | git tag of bootc |
 | `NOMIRA_CLI_REF` | git ref of nomira-cli; empty leaves the CLI out |
+
+The date in the tag of `ARCH_IMAGE` is the one date of the image.
+`hack/build-args.sh` derives two build arguments from it:
+
+| Derived | Meaning |
+|---|---|
+| `SNAPSHOT` | that day in the Arch Linux Archive; fixes all package versions |
+| `SOURCE_DATE_EPOCH` | midnight UTC of that day; used for reproducible output |
+
+Renovate moves `ARCH_IMAGE` to newer dated images, and with it the
+snapshot.
+
+## Reproducibility
+
+Building the same `versions.env` twice should give the same files:
+
+- Every pacman transaction ends with `files/pacman-normalize`: the install
+  dates in pacman's database become `SOURCE_DATE_EPOCH`, the log and the
+  package cache are removed.
+- dracut builds the initramfs with `reproducible=yes`, which uses
+  `SOURCE_DATE_EPOCH`.
+- CI splits the image into per-package layers with
+  [chunkah](https://github.com/coreos/chunkah), which reads pacman's
+  database and clamps all timestamps to `SOURCE_DATE_EPOCH`. An update
+  to one package changes one layer; unchanged packages keep their layer
+  digest across builds.
+
+Not verified yet: whether two builds are bit-for-bit identical. Known
+sources of difference are the pacman keyring and caches that hooks
+regenerate.
 
 Releases are published as `<version>` and also as
 `<version>-<snapshot date>`, for example `0.2.0` and `0.2.0-2026.11.13`.
@@ -90,10 +120,9 @@ with paths instead of labels on the files.
   Actions tab and choose `beta` or `final`. Version and changelog follow
   from the Conventional Commits, see
   [Nomira-OS/ci](https://github.com/Nomira-OS/ci).
-- **New snapshot:** on Mondays the "snapshot" workflow checks whether
-  the image builds with the previous day's snapshot and then writes the
-  date to `versions.env` as a `fix:` commit. Nothing is published by
-  that; the next release picks up the new state.
+- **New snapshot:** Renovate opens a pull request when a newer dated
+  Arch Linux image appears. CI builds the image for the pull request;
+  if it passes, Renovate merges it.
 
 All images are signed with cosign and carry a provenance attestation.
 The build ends with `bootc container lint`. CI does not boot the image
@@ -102,11 +131,8 @@ in a VM yet.
 ## Building locally
 
 ```sh
-. ./versions.env
 podman build -f Containerfile \
-  --build-arg SNAPSHOT="$SNAPSHOT" \
-  --build-arg BOOTC_REF="$BOOTC_REF" \
-  --build-arg NOMIRA_CLI_REF="$NOMIRA_CLI_REF" \
+  $(sh hack/build-args.sh | sed 's/^/--build-arg /') \
   -t localhost/nomira-image .
 ```
 

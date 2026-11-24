@@ -6,6 +6,18 @@
   "customManagers": [
     {
       "customType": "regex",
+      "description": "Dated Arch Linux base image in versions.env; its date is the archive snapshot",
+      "managerFilePatterns": [
+        "/^versions\\.env$/"
+      ],
+      "matchStrings": [
+        "ARCH_IMAGE=(?<depName>[^:\\s]+):(?<currentValue>[^@\\s]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "regex:^base-(?<major>\\d{8})\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
+    },
+    {
+      "customType": "regex",
       "description": "bootc tag in versions.env",
       "managerFilePatterns": [
         "/^versions\\.env$/"
@@ -29,6 +41,18 @@
       "datasourceTemplate": "git-refs",
       "depNameTemplate": "nomira-cli",
       "packageNameTemplate": "https://github.com/Nomira-OS/nomira-cli"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Pin the Arch base image by digest as well; the tag stays for readability",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDepNames": [
+        "docker.io/archlinux/archlinux"
+      ],
+      "pinDigests": true
     }
   ]
 }
