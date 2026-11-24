@@ -96,7 +96,8 @@ RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | \
 
 # What bootc needs to boot and install (kernel, initramfs, ostree, skopeo,
 # bubblewrap, filesystem tools, tpm2-tss for disk encryption bound to a
-# TPM), AppArmor, then the nomira toolchain: podman, buildkit, sudo, and
+# TPM, and tpm2-tools, without which dracut refuses its tpm2-tss module),
+# AppArmor, then the nomira toolchain: podman, buildkit, sudo, and
 # ukify and sbsigntools, with which nomira builds (and signs) the unified
 # kernel image of every image. Nothing else: no network manager, no
 # firmware, no ssh, no boot-test VM stack. Recipes add those.
@@ -104,7 +105,7 @@ RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
     --mount=type=bind,source=files/pacman-build,target=/tmp/pacman-build \
     sh /tmp/pacman-build -S --noconfirm --needed \
         base linux dracut ostree skopeo bubblewrap \
-        btrfs-progs e2fsprogs dosfstools tpm2-tss \
+        btrfs-progs e2fsprogs dosfstools tpm2-tss tpm2-tools \
         apparmor \
         podman passt buildkit sudo systemd-ukify sbsigntools
 
