@@ -174,9 +174,10 @@ RUN mkdir -p /usr/lib/dracut/dracut.conf.d && \
 
 # bootc, then the initramfs, which contains bootc's dracut module.
 COPY --from=bootc-build /output /
-COPY --chmod=0755 files/nomira-initramfs /usr/libexec/nomira-initramfs
 RUN --mount=type=tmpfs,target=/tmp --mount=type=tmpfs,target=/root \
-    /usr/libexec/nomira-initramfs && \
+    for dir in /usr/lib/modules/*/; do \
+        dracut --force --kver "$(basename "$dir")" "${dir}initramfs.img"; \
+    done && \
     img="$(echo /usr/lib/modules/*/initramfs.img)" && \
     for f in systemd-gpt-auto-generator systemd-cryptsetup libtss2-esys; do \
         lsinitrd "$img" | grep -q "$f" || { echo "initramfs lacks $f" >&2; exit 1; }; \

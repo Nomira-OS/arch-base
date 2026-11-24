@@ -1,9 +1,0 @@
-#!/bin/sh
-# Regenerates the initramfs of every installed kernel. The base image runs
-# this once; a recipe must run it again after adding or changing a kernel,
-# kernel modules or firmware that is needed early in boot.
-set -eu
-for dir in /usr/lib/modules/*/; do
-    [ -e "${dir}vmlinuz" ] || continue
-    dracut --force --kver "$(basename "$dir")" "${dir}initramfs.img"
-done

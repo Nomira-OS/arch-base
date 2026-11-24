@@ -120,8 +120,11 @@ is `!unprovisioned`, which systemd treats as not set). Then
 
 ## Notes for recipes
 
-- **Initramfs:** after adding or changing the kernel, kernel modules or
-  firmware that is needed early, call `/usr/libexec/nomira-initramfs`.
+- **Initramfs:** the image's initramfs is built from the image itself.
+  After adding or changing the kernel, kernel modules or firmware that is
+  needed early, run dracut again
+  (`dracut --force --kver <kver> /usr/lib/modules/<kver>/initramfs.img`),
+  or let a unified kernel image bring its own.
 - **pacman cache:** it lives in `/usr/lib/sysimage/cache/pacman/pkg`,
   not below `/var`. A cache mount must point to this path.
 - **`/var`, `/opt`, `/usr/local`, `/home`:** they are not part of the
