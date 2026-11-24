@@ -30,7 +30,7 @@ and the boot test with bcvk (it would need QEMU). The recipe chooses
 those.
 
 buildkitd runs as root and only on demand: `buildkit.socket` is enabled
-and starts the daemon as soon as `sudo nomira switch` talks to it.
+and starts the daemon as soon as `sudo nomira build` talks to it.
 
 ## Pinned state
 
@@ -94,69 +94,14 @@ collect: run --mount=type=tmpfs,target=/etc/pacman.d/gnupg --mount=type=cache,ta
 
 ## Unified kernel image
 
-nomira builds a unified kernel image (UKI) for every image it builds:
-kernel, initramfs and a command line that carries the composefs digest of
-the system, in one file. The image brings the tools for it (`bootc
-container ukify`, ukify, sbsigntools), so the digest is computed by the
-same bootc that checks it at boot. A UKI has no `root=` argument; systemd
-finds the root partition by its GPT type, and unlocks it if it is
-encrypted. The initramfs build checks that the generator and the
-cryptsetup and TPM pieces for this are included.
-
-## Boot loader and storage
-
-The image is installed with bootc's **composefs backend** and boots with
-**systemd-boot**. `bootc install` picks both on its own: the empty file
-`/usr/lib/composefs/setup-root-conf.toml` marks the image as
-composefs-native, and without bootupd in the image bootc chooses
-systemd-boot, which it installs itself with `bootctl`.
-
-GRUB is not an option on Arch for now: bootc installs it through bootupd,
-and bootupd generates its metadata with rpm
-([bootupd#468](https://github.com/coreos/bootupd/issues/468)).
-
-Known limits of the composefs backend in bootc 1.17, from its
-documentation: no boot counting, so a system that fails to boot does not
-fall back on its own (the previous entry is still in the boot menu);
-`bootc install --root-ssh-authorized-keys` and install-time `karg-deletes`
-are ignored; one EFI system partition, no XBOOTLDR; no
-logically bound images. Each switch writes new boot entries; systemd-boot
-itself is not updated after the installation yet.
-
-## AppArmor
-
-AppArmor is active in the image: the kernel arguments in
-`/usr/lib/bootc/kargs.d/10-apparmor.toml` add it to the `lsm=` list, and
-`apparmor.service` loads the profiles from `/etc/apparmor.d` at boot.
-Profiles are enforced unless a profile says otherwise. A recipe puts its
-own profiles into `/etc/apparmor.d`. `aa-status` shows the state.
-
-bootc itself needs no support for this. Unlike SELinux, AppArmor works
-with paths instead of labels on the files.
-
-## CI and releases
-
-- **Every commit on `main`** is built and published as the immutable
-  development build `sha-<commit>`.
-- **Releases** are cut by hand: start the "release" workflow in the
-  Actions tab and choose `beta` or `final`. Version and changelog follow
-  from the Conventional Commits, see
-  [Nomira-OS/ci](https://github.com/Nomira-OS/ci).
-- **New snapshot:** Renovate opens a pull request when a newer dated
-  Arch Linux image appears. CI builds the image for the pull request;
-  if it passes, Renovate merges it.
-
-All images are signed with cosign and carry a provenance attestation.
-The build ends with `bootc container lint`. CI does not boot the image
-in a VM yet.
-
-## Building locally
-
-```sh
-podman build -f Containerfile \
-  $(sh hack/build-args.sh | sed 's/^/--build-arg /') \
-  -t localhost/nomira-image .
-```
+Recipes on top can replace kernel and initramfs with a unified kernel
+image (UKI) whose command line carries the composefs digest of the
+system. The image brings the tools for it (`bootc container ukify`,
+ukify, sbsigntools), so the digest is computed by the same bootc that
+checks it at boot. A UKI has no `root=` argument; systemd finds the root
+partition by its GPT type, and unlocks it if it is encrypted. The
+initramfs build checks that the generator and the cryptsetup and TPM
+pieces for this are included.
 
 ## First boot
 
