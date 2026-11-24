@@ -91,7 +91,9 @@ collect: run --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg nomira
 
 The image leaves locale, keymap, time zone and the root password open, so
 systemd-firstboot asks for them on the console at the first boot (root
-is `!unprovisioned`). It creates no other user.
+is `!unprovisioned`). systemd-homed is active, and
+systemd-homed-firstboot then asks for the first user; members of `wheel`
+may use sudo.
 
 Releases are published as `<version>` and also as
 `<version>-<snapshot date>`, for example `0.2.0` and `0.2.0-2026.11.13`.

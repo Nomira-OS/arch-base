@@ -122,6 +122,14 @@ RUN echo "uninitialized" > /etc/machine-id && \
     sed -i 's/^root:[^:]*:/root:!unprovisioned:/' /etc/shadow && \
     grep -q '^root:!unprovisioned:' /etc/shadow
 
+# Users: systemd-homed manages them, so a home can be encrypted (LUKS2 by
+# default, in /home/<user>.home) and is unlocked with the user's password.
+# At the first boot systemd-homed-firstboot asks for the first user.
+# Members of wheel may use sudo, which nomira switch needs. Arch's PAM and NSS configuration already include homed.
+RUN systemctl enable systemd-homed.service systemd-homed-firstboot.service && \
+    printf '%%wheel ALL=(ALL:ALL) ALL\n' > /etc/sudoers.d/10-wheel && \
+    chmod 0440 /etc/sudoers.d/10-wheel
+
 # The image is meant for bootc's composefs backend: the only one with which
 # bootc installs systemd-boot itself. GRUB would need bootupd, which cannot
 # generate its metadata on Arch (it asks rpm). This empty file marks the
