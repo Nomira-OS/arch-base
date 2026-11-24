@@ -83,6 +83,17 @@ up a keyring in a tmpfs, which never ends up in the layer:
 collect: run --mount=type=tmpfs,target=/etc/pacman.d/gnupg --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg pacman-key --init && pacman-key --populate && pacman -S --needed --noconfirm ${items}
 ```
 
+## Unified kernel image
+
+nomira builds a unified kernel image (UKI) for every image it builds:
+kernel, initramfs and a command line that carries the composefs digest of
+the system, in one file. The image brings the tools for it (`bootc
+container ukify`, ukify, sbsigntools), so the digest is computed by the
+same bootc that checks it at boot. A UKI has no `root=` argument; systemd
+finds the root partition by its GPT type, and unlocks it if it is
+encrypted. The initramfs build checks that the generator and the
+cryptsetup and TPM pieces for this are included.
+
 ## First boot
 
 The image leaves locale, keymap, time zone and the root password open, so

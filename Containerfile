@@ -95,16 +95,18 @@ RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | \
     sed -i -e "/= *\/var/ s/^#//" -e "s@= */var@= /usr/lib/sysimage@g" /etc/pacman.conf
 
 # What bootc needs to boot and install (kernel, initramfs, ostree, skopeo,
-# bubblewrap, filesystem tools), AppArmor, then the nomira toolchain.
-# Nothing else: no network manager, no firmware, no ssh, no boot-test VM
-# stack. Recipes add those.
+# bubblewrap, filesystem tools, tpm2-tss for disk encryption bound to a
+# TPM), AppArmor, then the nomira toolchain: podman, buildkit, sudo, and
+# ukify and sbsigntools, with which nomira builds (and signs) the unified
+# kernel image of every image. Nothing else: no network manager, no
+# firmware, no ssh, no boot-test VM stack. Recipes add those.
 RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
     --mount=type=bind,source=files/pacman-build,target=/tmp/pacman-build \
     sh /tmp/pacman-build -S --noconfirm --needed \
         base linux dracut ostree skopeo bubblewrap \
-        btrfs-progs e2fsprogs dosfstools \
+        btrfs-progs e2fsprogs dosfstools tpm2-tss \
         apparmor \
-        podman passt buildkit sudo
+        podman passt buildkit sudo systemd-ukify sbsigntools
 
 # AppArmor: the kernel only activates it when it is named in the lsm= list
 # (Arch's default list plus apparmor), and apparmor.service loads the
@@ -159,18 +161,25 @@ RUN systemctl enable systemd-homed.service systemd-homed-firstboot.service && \
 RUN mkdir -p /usr/lib/composefs && : > /usr/lib/composefs/setup-root-conf.toml
 
 # Initramfs configuration: with the bootc dracut module, not tied to the
-# build host.
+# build host. A unified kernel image carries no root= argument: systemd
+# finds the root partition by its GPT type (systemd-gpt-auto-generator)
+# and unlocks it if it is encrypted, with a TPM if one is enrolled. Hence
+# the cryptsetup and TPM modules, which dracut only adds when asked.
 RUN mkdir -p /usr/lib/dracut/dracut.conf.d && \
     printf 'systemdsystemconfdir=/etc/systemd/system\nsystemdsystemunitdir=/usr/lib/systemd/system\n' \
         > /usr/lib/dracut/dracut.conf.d/30-nomira-bootc-module.conf && \
-    printf 'reproducible=yes\nhostonly=no\ncompress=zstd\nadd_dracutmodules+=" bootc "\n' \
+    printf 'reproducible=yes\nhostonly=no\ncompress=zstd\nadd_dracutmodules+=" bootc systemd-cryptsetup tpm2-tss "\n' \
         > /usr/lib/dracut/dracut.conf.d/30-nomira-container-build.conf
 
 # bootc, then the initramfs, which contains bootc's dracut module.
 COPY --from=bootc-build /output /
 COPY --chmod=0755 files/nomira-initramfs /usr/libexec/nomira-initramfs
 RUN --mount=type=tmpfs,target=/tmp --mount=type=tmpfs,target=/root \
-    /usr/libexec/nomira-initramfs
+    /usr/libexec/nomira-initramfs && \
+    img="$(echo /usr/lib/modules/*/initramfs.img)" && \
+    for f in systemd-gpt-auto-generator systemd-cryptsetup libtss2-esys; do \
+        lsinitrd "$img" | grep -q "$f" || { echo "initramfs lacks $f" >&2; exit 1; }; \
+    done
 
 # bootc filesystem layout: state lives in /var, the rest is the image.
 RUN sed -i 's|^HOME=.*|HOME=/var/home|' /etc/default/useradd && \
