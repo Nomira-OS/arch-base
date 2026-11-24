@@ -1,14 +1,14 @@
-# nomira-image
+# arch-base
 
 > **Alpha.** Content and layout of the image may still change.
 
-The base image for nomira recipes: the smallest Arch Linux that bootc
-can boot, plus the tools to build nomira images on the machine itself
-and switch to them.
+nomira's Arch Linux base image: the smallest Arch Linux that bootc can
+boot, plus the tools to build nomira images on the machine itself. Other
+bases may follow under their own names.
 
 ```yaml
 settings:
-  base: ghcr.io/nomira-os/nomira-image:TAG
+  base: ghcr.io/nomira-os/arch-base:TAG
 ```
 
 No release has been published yet. Until then only development builds

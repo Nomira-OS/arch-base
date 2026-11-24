@@ -7,7 +7,7 @@ Guidance for coding agents (and humans) working in this repository.
 The base image for nomira recipes: the smallest Arch Linux that bootc can
 boot, with AppArmor active, plus the tools to build nomira images on the
 machine itself (podman, buildkit, the nomira CLI). Published as
-`ghcr.io/nomira-os/nomira-image`.
+`ghcr.io/nomira-os/arch-base`.
 
 Sibling repositories: `nomira` (BuildKit frontend), `nomira-cli`,
 `nomira-web` (reference recipe and website).
@@ -32,7 +32,7 @@ Sibling repositories: `nomira` (BuildKit frontend), `nomira-cli`,
 ```sh
 podman build -f Containerfile \
   $(sh hack/build-args.sh | sed 's/^/--build-arg /') \
-  -t localhost/nomira-image .
+  -t localhost/arch-base .
 ```
 
 The build ends with `bootc container lint`. A full build compiles bootc
