@@ -6,6 +6,7 @@
 # Usage: sh hack/build-args.sh [versions.env]
 set -eu
 env_file="${1:-versions.env}"
+# shellcheck source=/dev/null
 . "./$env_file"
 day="$(printf '%s\n' "$ARCH_IMAGE" | sed -n 's/.*:base-\([0-9]\{8\}\)\..*/\1/p')"
 [ -n "$day" ] || { echo "ARCH_IMAGE has no base-YYYYMMDD tag: $ARCH_IMAGE" >&2; exit 1; }

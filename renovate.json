@@ -14,7 +14,8 @@
         "ARCH_IMAGE=(?<depName>[^:\\s]+):(?<currentValue>[^@\\s]+)(?:@(?<currentDigest>sha256:[a-f0-9]{64}))?"
       ],
       "datasourceTemplate": "docker",
-      "versioningTemplate": "regex:^base-(?<major>\\d{8})\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
+      "versioningTemplate": "regex:^base-(?<major>\\d{8})\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
+      "autoReplaceStringTemplate": "ARCH_IMAGE={{{depName}}}:{{{newValue}}}{{#if newDigest}}@{{{newDigest}}}{{/if}}"
     },
     {
       "customType": "regex",

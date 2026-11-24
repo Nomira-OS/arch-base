@@ -27,17 +27,20 @@ ARG SOURCE_DATE_EPOCH
 # from the same package state. -Syyuu also downgrades, so the result does not
 # depend on how new ARCH_IMAGE is.
 RUN --mount=type=bind,source=files/pacman-normalize,target=/tmp/pacman-normalize \
+    --mount=type=bind,source=files/pacman-retry,target=/tmp/pacman-retry \
     test -n "$SNAPSHOT" && \
     printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' "$SNAPSHOT" \
         > /etc/pacman.d/mirrorlist && \
-    sed -i '/DownloadUser/d' /etc/pacman.conf && \
-    pacman -Syyuu --noconfirm && \
+    sed -i -e '/DownloadUser/d' \
+        -e 's/^#\?ParallelDownloads.*/ParallelDownloads = 2/' /etc/pacman.conf && \
+    sh /tmp/pacman-retry -Syyuu --noconfirm && \
     sh /tmp/pacman-normalize
 
 # --- bootc, built from source -----------------------------------------------
 FROM base AS bootc-build
 ARG BOOTC_REF
-RUN pacman -S --noconfirm --needed make git rust go-md2man ostree glibc pkgconf
+RUN --mount=type=bind,source=files/pacman-retry,target=/tmp/pacman-retry \
+    sh /tmp/pacman-retry -S --noconfirm --needed make git rust go-md2man ostree glibc pkgconf
 # Arch has no libselinux, so bootc is built without its selinux feature (it
 # then treats SELinux as disabled). Man pages and the integration test
 # binary are left out.
@@ -49,9 +52,10 @@ RUN test -n "$BOOTC_REF" && \
 # --- nomira CLI (optional) ---------------------------------------------------
 FROM base AS cli-build
 ARG NOMIRA_CLI_REF
-RUN mkdir -p /output/usr/bin && \
+RUN --mount=type=bind,source=files/pacman-retry,target=/tmp/pacman-retry \
+    mkdir -p /output/usr/bin && \
     if [ -n "$NOMIRA_CLI_REF" ]; then \
-        pacman -S --noconfirm --needed go git && \
+        sh /tmp/pacman-retry -S --noconfirm --needed go git && \
         git clone https://github.com/Nomira-OS/nomira-cli /src && \
         git -C /src checkout "$NOMIRA_CLI_REF" && \
         cd /src && CGO_ENABLED=0 go build -trimpath -o /output/usr/bin/nomira . ; \
@@ -79,7 +83,8 @@ RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | \
 # Nothing else: no network manager, no firmware, no ssh, no boot-test VM
 # stack. Recipes add those.
 RUN --mount=type=bind,source=files/pacman-normalize,target=/tmp/pacman-normalize \
-    pacman -S --noconfirm --needed \
+    --mount=type=bind,source=files/pacman-retry,target=/tmp/pacman-retry \
+    sh /tmp/pacman-retry -S --noconfirm --needed \
         base linux dracut ostree skopeo bubblewrap \
         btrfs-progs e2fsprogs dosfstools \
         apparmor \
