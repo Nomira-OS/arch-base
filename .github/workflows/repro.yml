@@ -37,8 +37,10 @@ jobs:
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          file: Containerfile
           build-args: ${{ steps.v.outputs.build-args }}
           no-cache: true
+          provenance: false
           outputs: type=oci,dest=${{ runner.temp }}/flat.tar
       - name: List the files
         run: |
