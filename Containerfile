@@ -109,6 +109,16 @@ RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
         apparmor \
         podman passt buildkit sudo systemd-ukify sbsigntools
 
+# bootc container ukify looks for ukify in PATH. Fail here rather than in a
+# recipe if it, sbsign or dracut is missing; if Arch only ships ukify below
+# /usr/lib/systemd, link it into PATH.
+RUN if ! command -v ukify > /dev/null && [ -x /usr/lib/systemd/ukify ]; then \
+        ln -s ../lib/systemd/ukify /usr/bin/ukify; \
+    fi && \
+    for t in ukify sbsign dracut; do \
+        command -v "$t" || { echo "missing in PATH: $t" >&2; exit 1; }; \
+    done
+
 # AppArmor: the kernel only activates it when it is named in the lsm= list
 # (Arch's default list plus apparmor), and apparmor.service loads the
 # profiles from /etc/apparmor.d at boot. Profiles are enforcing unless a
