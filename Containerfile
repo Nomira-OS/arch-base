@@ -97,6 +97,15 @@ RUN systemctl enable buildkit.socket
 RUN echo "uninitialized" > /etc/machine-id && \
     rm -f /etc/localtime
 
+# The image is meant for bootc's composefs backend: the only one with which
+# bootc installs systemd-boot itself. GRUB would need bootupd, which cannot
+# generate its metadata on Arch (it asks rpm). This empty file marks the
+# image as composefs-native, so `bootc install` picks composefs, and with no
+# bootupd in the image, systemd-boot, without any options. The bootc dracut
+# module copies the file into the initramfs, so it must exist before dracut
+# runs.
+RUN mkdir -p /usr/lib/composefs && : > /usr/lib/composefs/setup-root-conf.toml
+
 # Initramfs with the bootc dracut module, not tied to the build host.
 RUN mkdir -p /usr/lib/dracut/dracut.conf.d && \
     printf 'systemdsystemconfdir=/etc/systemd/system\nsystemdsystemunitdir=/usr/lib/systemd/system\n' \
@@ -110,8 +119,7 @@ RUN --mount=type=tmpfs,target=/tmp --mount=type=tmpfs,target=/root \
 RUN sed -i 's|^HOME=.*|HOME=/var/home|' /etc/default/useradd && \
     rm -rf /boot /home /root /usr/local /srv /opt /mnt /var \
         /usr/lib/sysimage/log /usr/lib/sysimage/cache/pacman/pkg && \
-    mkdir -p /sysroot /boot /usr/lib/ostree /var && \
-    ln -sT sysroot/ostree /ostree && \
+    mkdir -p /sysroot /boot /var && \
     ln -sT var/roothome /root && \
     ln -sT var/srv /srv && \
     ln -sT var/opt /opt && \
@@ -121,9 +129,7 @@ RUN sed -i 's|^HOME=.*|HOME=/var/home|' /etc/default/useradd && \
     printf 'd /var/%s 0755 root root -\n' opt home srv mnt usrlocal \
         > /usr/lib/tmpfiles.d/bootc-base-dirs.conf && \
     printf 'd /var/roothome 0700 root root -\nd /run/media 0755 root root -\n' \
-        >> /usr/lib/tmpfiles.d/bootc-base-dirs.conf && \
-    printf '[composefs]\nenabled = yes\n[sysroot]\nreadonly = true\n' \
-        > /usr/lib/ostree/prepare-root.conf
+        >> /usr/lib/tmpfiles.d/bootc-base-dirs.conf
 
 LABEL containers.bootc=1 \
       org.nomira.snapshot="${SNAPSHOT}" \

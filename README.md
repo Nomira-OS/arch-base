@@ -20,7 +20,7 @@ No release has been published yet. Until then only development builds
 | Purpose | Packages |
 |---|---|
 | Base system | `base` |
-| Booting with bootc | `linux`, `dracut`, `ostree`, bootc (built from source) |
+| Booting with bootc | `linux`, `dracut`, bootc (built from source), `ostree` (a library bootc needs) |
 | `bootc install` | `skopeo`, `bubblewrap`, `btrfs-progs`, `e2fsprogs`, `dosfstools` |
 | Hardening | `apparmor`, active at boot |
 | nomira tools | `podman`, `passt`, `buildkit`, `sudo`, the nomira CLI |
@@ -50,6 +50,26 @@ The mirrorlist in the image points to the same snapshot. A `pacman -S`
 in a recipe therefore installs from the same package set as the base
 image, without the recipe having to know a date: the tag of the base
 image is the package set.
+
+## Boot loader and storage
+
+The image is installed with bootc's **composefs backend** and boots with
+**systemd-boot**. `bootc install` picks both on its own: the empty file
+`/usr/lib/composefs/setup-root-conf.toml` marks the image as
+composefs-native, and without bootupd in the image bootc chooses
+systemd-boot, which it installs itself with `bootctl`.
+
+GRUB is not an option on Arch for now: bootc installs it through bootupd,
+and bootupd generates its metadata with rpm
+([bootupd#468](https://github.com/coreos/bootupd/issues/468)).
+
+Known limits of the composefs backend in bootc 1.17, from its
+documentation: no boot counting, so a system that fails to boot does not
+fall back on its own (the previous entry is still in the boot menu);
+`bootc install --root-ssh-authorized-keys` and install-time `karg-deletes`
+are ignored; one EFI system partition, no XBOOTLDR; no
+logically bound images. Each switch writes new boot entries; systemd-boot
+itself is not updated after the installation yet.
 
 ## AppArmor
 
