@@ -13,8 +13,8 @@
 #   BOOTC_REF          bootc git tag, built from source
 #   NOMIRA_CLI_REF     nomira-cli git ref; empty leaves the CLI out
 #
-# Reproducibility: nomira-pacman sets the install dates to SOURCE_DATE_EPOCH
-# and drops the log, every pacman step drops the cache, and the image has no
+# Reproducibility: files/pacman-build sets the install dates to
+# SOURCE_DATE_EPOCH and drops the log and the cache, and the image has no
 # pacman keyring; dracut builds a reproducible initramfs from SOURCE_DATE_EPOCH; CI
 # clamps all timestamps to it when it splits the image into layers.
 ARG ARCH_IMAGE
@@ -23,26 +23,32 @@ ARG ARCH_IMAGE
 FROM ${ARCH_IMAGE} AS base
 ARG SNAPSHOT
 ARG SOURCE_DATE_EPOCH
-# nomira-pacman wraps pacman for every build step here and in recipes on top:
-# a throwaway keyring per call, retries, reproducible install dates.
-COPY --chmod=0755 files/nomira-pacman /usr/bin/nomira-pacman
 # The mirrorlist stays in the final image, so recipes built on top install
 # from the same package state. -Syyuu also downgrades, so the result does not
-# depend on how new ARCH_IMAGE is. The keyring of the Arch image goes: its
-# private signing key is stripped anyway, and nomira-pacman brings its own.
-RUN test -n "$SNAPSHOT" && \
+# depend on how new ARCH_IMAGE is.
+#
+# No pacman keyring stays in the image: a keyring holds a private signing
+# key, which would then be the same on every machine. The Arch image's
+# keyring goes (its private key is stripped, so it cannot accept new keys
+# anyway). Every pacman step sets up a keyring in a tmpfs instead, see
+# files/pacman-build; recipes do the same.
+RUN rm -rf /etc/pacman.d/gnupg
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
+    --mount=type=bind,source=files/pacman-build,target=/tmp/pacman-build \
+    test -n "$SNAPSHOT" && \
     printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' "$SNAPSHOT" \
         > /etc/pacman.d/mirrorlist && \
     sed -i -e '/DownloadUser/d' \
         -e 's/^#\?ParallelDownloads.*/ParallelDownloads = 2/' /etc/pacman.conf && \
-    rm -rf /etc/pacman.d/gnupg && \
-    nomira-pacman -Syyuu --noconfirm && \
-    rm -rf "$(pacman-conf CacheDir)"*
+    sh /tmp/pacman-build -Syyuu --noconfirm
 
 # --- bootc, built from source -----------------------------------------------
 FROM base AS bootc-build
 ARG BOOTC_REF
-RUN nomira-pacman -S --noconfirm --needed make git rust go-md2man ostree glibc pkgconf
+ARG SOURCE_DATE_EPOCH
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
+    --mount=type=bind,source=files/pacman-build,target=/tmp/pacman-build \
+    sh /tmp/pacman-build -S --noconfirm --needed make git rust go-md2man ostree glibc pkgconf
 # Arch has no libselinux, so bootc is built without its selinux feature (it
 # then treats SELinux as disabled). Man pages and the integration test
 # binary are left out. bootc's release profile keeps full debug info for
@@ -60,9 +66,12 @@ RUN test -n "$BOOTC_REF" && \
 # --- nomira CLI (optional) ---------------------------------------------------
 FROM base AS cli-build
 ARG NOMIRA_CLI_REF
-RUN mkdir -p /output/usr/bin && \
+ARG SOURCE_DATE_EPOCH
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
+    --mount=type=bind,source=files/pacman-build,target=/tmp/pacman-build \
+    mkdir -p /output/usr/bin && \
     if [ -n "$NOMIRA_CLI_REF" ]; then \
-        nomira-pacman -S --noconfirm --needed go git && \
+        sh /tmp/pacman-build -S --noconfirm --needed go git && \
         git clone https://github.com/Nomira-OS/nomira-cli /src && \
         git -C /src checkout "$NOMIRA_CLI_REF" && \
         cd /src && CGO_ENABLED=0 go build -trimpath -o /output/usr/bin/nomira . ; \
@@ -89,12 +98,13 @@ RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | \
 # bubblewrap, filesystem tools), AppArmor, then the nomira toolchain.
 # Nothing else: no network manager, no firmware, no ssh, no boot-test VM
 # stack. Recipes add those.
-RUN nomira-pacman -S --noconfirm --needed \
+RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
+    --mount=type=bind,source=files/pacman-build,target=/tmp/pacman-build \
+    sh /tmp/pacman-build -S --noconfirm --needed \
         base linux dracut ostree skopeo bubblewrap \
         btrfs-progs e2fsprogs dosfstools \
         apparmor \
-        podman passt buildkit sudo && \
-    rm -rf "$(pacman-conf CacheDir)"*
+        podman passt buildkit sudo
 
 # AppArmor: the kernel only activates it when it is named in the lsm= list
 # (Arch's default list plus apparmor), and apparmor.service loads the

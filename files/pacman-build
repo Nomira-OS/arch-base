@@ -1,0 +1,50 @@
+#!/bin/sh
+# pacman for the steps of this Containerfile; not part of the image. Takes
+# the same arguments as pacman. Each RUN mounts it and a tmpfs for the
+# keyring:
+#
+#   RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
+#       --mount=type=bind,source=files/pacman-build,target=/tmp/pacman-build \
+#       sh /tmp/pacman-build -S ...
+#
+# - Keyring: set up in the tmpfs for this one step, so no private key ends
+#   up in a layer. The image ships no keyring; recipes do the same.
+# - Retries: the Arch Linux Archive sometimes answers too slowly. A failed
+#   call is tried again after 30 s and after 90 s; packages already
+#   downloaded stay in the cache.
+# - Reproducibility: the install date of every package becomes
+#   SOURCE_DATE_EPOCH, and the pacman log and the package cache are removed.
+set -eu
+: "${SOURCE_DATE_EPOCH:?SOURCE_DATE_EPOCH is not set}"
+
+gpgdir=/etc/pacman.d/gnupg
+mountpoint -q "$gpgdir" || {
+    echo "pacman-build: mount a tmpfs at $gpgdir, the keyring must not end up in the image" >&2
+    exit 1
+}
+pacman-key --init > /dev/null
+pacman-key --populate > /dev/null
+
+status=1
+for wait in 30 90 0; do
+    if pacman "$@"; then
+        status=0
+        break
+    fi
+    [ "$wait" = 0 ] && break
+    echo "pacman-build: pacman failed; trying again in ${wait}s" >&2
+    sleep "$wait"
+done
+[ "$status" = 0 ] || exit 1
+
+db="$(pacman-conf DBPath)"
+for desc in "${db%/}"/local/*/desc; do
+    [ -e "$desc" ] || continue
+    awk -v t="$SOURCE_DATE_EPOCH" \
+        'fix { print t; fix = 0; next } /^%INSTALLDATE%$/ { fix = 1 } { print }' \
+        "$desc" > "$desc.new"
+    cat "$desc.new" > "$desc"
+    rm "$desc.new"
+done
+rm -f "$(pacman-conf LogFile)"
+rm -rf "$(pacman-conf CacheDir)"*

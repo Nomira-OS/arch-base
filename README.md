@@ -57,10 +57,9 @@ snapshot.
 
 Building the same `versions.env` twice should give the same files:
 
-- pacman runs through `nomira-pacman` (see below), which sets the install
-  dates in pacman's database to `SOURCE_DATE_EPOCH` and removes the log.
-  Each step removes the package cache, and the image has no pacman
-  keyring.
+- Every pacman step runs through `files/pacman-build`, which sets the
+  install dates in pacman's database to `SOURCE_DATE_EPOCH` and removes
+  the log and the package cache. The image has no pacman keyring.
 - dracut builds the initramfs with `reproducible=yes`, which uses
   `SOURCE_DATE_EPOCH`.
 - CI splits the image into per-package layers with
@@ -72,19 +71,16 @@ Building the same `versions.env` twice should give the same files:
 The `repro` workflow checks this: it builds the image twice without cache
 and compares the layers.
 
-## pacman in builds on top: `nomira-pacman`
+## pacman in builds on top
 
 The image ships no pacman keyring. A keyring contains a private signing
 key, and one baked into an image is the same key on every machine that
 uses it (the Arch images strip it for that reason, which also leaves
-their keyring unable to accept new keys). `/usr/bin/nomira-pacman` takes
-the same arguments as pacman and, for each call, sets up a throwaway
-keyring from the installed `archlinux-keyring`, retries when the Arch
-Linux Archive is slow, and makes the install dates reproducible. Use it
-in recipes instead of `pacman`:
+their keyring unable to accept new keys). A step that runs pacman sets
+up a keyring in a tmpfs, which never ends up in the layer:
 
 ```yaml
-collect: run --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg nomira-pacman -S --needed --noconfirm ${items}
+collect: run --mount=type=tmpfs,target=/etc/pacman.d/gnupg --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg pacman-key --init && pacman-key --populate && pacman -S --needed --noconfirm ${items}
 ```
 
 ## First boot
