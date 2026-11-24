@@ -1,0 +1,50 @@
+#!/bin/sh
+# nomira-pacman: pacman for image builds. Takes the same arguments as pacman.
+#
+# - Keyring: the image ships no pacman keyring. A keyring holds a private
+#   signing key, and one baked into an image would be the same key on every
+#   machine built from it. For each call a throwaway keyring is set up from
+#   the archlinux-keyring package installed in the image, used, and removed.
+# - Retries: the Arch Linux Archive sometimes answers too slowly. A failed
+#   call is tried again after 30 s and after 90 s; packages already
+#   downloaded stay in the cache.
+# - Reproducibility: when SOURCE_DATE_EPOCH is set, the install date of every
+#   package becomes SOURCE_DATE_EPOCH, and the pacman log is removed, so the
+#   layer does not depend on when it was built.
+set -eu
+
+gpgdir="$(mktemp -d)"
+# shellcheck disable=SC2329 # called by the trap
+cleanup() {
+    gpgconf --homedir "$gpgdir" --kill all 2> /dev/null || true
+    rm -rf "$gpgdir"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+pacman-key --gpgdir "$gpgdir" --init > /dev/null
+pacman-key --gpgdir "$gpgdir" --populate > /dev/null
+
+status=1
+for wait in 30 90 0; do
+    if pacman --gpgdir "$gpgdir" "$@"; then
+        status=0
+        break
+    fi
+    [ "$wait" = 0 ] && break
+    echo "nomira-pacman: pacman failed; trying again in ${wait}s" >&2
+    sleep "$wait"
+done
+
+if [ "$status" = 0 ] && [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
+    db="$(pacman-conf DBPath)"
+    for desc in "${db%/}"/local/*/desc; do
+        [ -e "$desc" ] || continue
+        awk -v t="$SOURCE_DATE_EPOCH" \
+            'fix { print t; fix = 0; next } /^%INSTALLDATE%$/ { fix = 1 } { print }' \
+            "$desc" > "$desc.new"
+        cat "$desc.new" > "$desc"
+        rm "$desc.new"
+    done
+    rm -f "$(pacman-conf LogFile)"
+fi
+exit "$status"

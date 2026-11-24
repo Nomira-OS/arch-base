@@ -19,10 +19,13 @@ Sibling repositories: `nomira` (BuildKit frontend), `nomira-cli`,
 - `versions.env`: everything that determines the content.
   `hack/build-args.sh` turns it into build arguments, deriving the
   snapshot date and `SOURCE_DATE_EPOCH` from the tag of `ARCH_IMAGE`.
-- `files/pacman-normalize`: run after every pacman transaction.
+- `files/nomira-pacman`: pacman with a throwaway keyring, retries and
+  reproducible install dates; used for every pacman call and shipped
+  as `/usr/bin/nomira-pacman` for recipes.
 - `files/`: files copied into the image.
 - `.github/workflows/`: `ci` (build and publish `sha-<commit>`),
-  `release` (manual, beta or final). Both call the shared workflows in
+  `release` (manual, beta or final), `repro` (manual: two builds without
+  cache, layers compared). Both call the shared workflows in
   `Nomira-OS/ci` and split the image into layers with chunkah.
 
 ## Build
@@ -47,8 +50,9 @@ and takes around 20 minutes without cache.
   `SOURCE_DATE_EPOCH`; never define either a second time. The mirrorlist
   stays in the image so recipes on top install from the same state. Do
   not add package sources that bypass the snapshot.
-- **Reproducibility.** A `RUN` that calls pacman ends with
-  `pacman-normalize`. Order layers by how often they change; the CLI
+- **Reproducibility.** Call pacman only through `nomira-pacman` and end
+  the `RUN` by removing the package cache. Never ship a pacman keyring
+  (`/etc/pacman.d/gnupg`): it holds a private key. Order layers by how often they change; the CLI
   comes last.
 - **Never use `latest`,** neither for images consumed here nor as a
   published tag. Renovate updates `ARCH_IMAGE` (tag and digest),

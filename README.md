@@ -57,9 +57,10 @@ snapshot.
 
 Building the same `versions.env` twice should give the same files:
 
-- Every pacman transaction ends with `files/pacman-normalize`: the install
-  dates in pacman's database become `SOURCE_DATE_EPOCH`, the log and the
-  package cache are removed.
+- pacman runs through `nomira-pacman` (see below), which sets the install
+  dates in pacman's database to `SOURCE_DATE_EPOCH` and removes the log.
+  Each step removes the package cache, and the image has no pacman
+  keyring.
 - dracut builds the initramfs with `reproducible=yes`, which uses
   `SOURCE_DATE_EPOCH`.
 - CI splits the image into per-package layers with
@@ -68,9 +69,29 @@ Building the same `versions.env` twice should give the same files:
   to one package changes one layer; unchanged packages keep their layer
   digest across builds.
 
-Not verified yet: whether two builds are bit-for-bit identical. Known
-sources of difference are the pacman keyring and caches that hooks
-regenerate.
+The `repro` workflow checks this: it builds the image twice without cache
+and compares the layers.
+
+## pacman in builds on top: `nomira-pacman`
+
+The image ships no pacman keyring. A keyring contains a private signing
+key, and one baked into an image is the same key on every machine that
+uses it (the Arch images strip it for that reason, which also leaves
+their keyring unable to accept new keys). `/usr/bin/nomira-pacman` takes
+the same arguments as pacman and, for each call, sets up a throwaway
+keyring from the installed `archlinux-keyring`, retries when the Arch
+Linux Archive is slow, and makes the install dates reproducible. Use it
+in recipes instead of `pacman`:
+
+```yaml
+collect: run --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg nomira-pacman -S --needed --noconfirm ${items}
+```
+
+## First boot
+
+The image leaves locale, keymap, time zone and the root password open, so
+systemd-firstboot asks for them on the console at the first boot (root
+is `!unprovisioned`). It creates no other user.
 
 Releases are published as `<version>` and also as
 `<version>-<snapshot date>`, for example `0.2.0` and `0.2.0-2026.11.13`.
