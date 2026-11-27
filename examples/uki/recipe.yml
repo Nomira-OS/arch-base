@@ -6,7 +6,7 @@
 # README.md for what to adapt.
 settings:
   name: mysystem
-  base: ghcr.io/nomira-os/arch-base:sha-492224c
+  base: ghcr.io/nomira-os/arch-base:sha-33740cd
   # Without source_date_epoch the base image's creation time is used.
   # Layer compression, secrets and the like are options of the client:
   # see nomira.conf in the nomira CLI.

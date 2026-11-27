@@ -5,7 +5,7 @@
 # asked at the first boot.
 settings:
   name: mysystem
-  base: ghcr.io/nomira-os/arch-base:sha-492224c
+  base: ghcr.io/nomira-os/arch-base:sha-33740cd
 
 build:
   packages:
