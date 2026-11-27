@@ -1,4 +1,4 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-8357a4b
+# syntax=ghcr.io/nomira-os/nomira:sha-815d9e2
 #
 # A system for a real machine: firmware, network, SSH, an editor, all
 # languages, and a unified kernel image. The image carries this recipe in
