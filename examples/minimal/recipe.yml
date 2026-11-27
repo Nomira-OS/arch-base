@@ -1,11 +1,11 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-5184de4
+# syntax=ghcr.io/nomira-os/nomira:sha-1a6db4e
 #
 # The smallest useful system: the base image plus a network service.
 # Language, keymap, time zone, root password and the first user are
 # asked at the first boot.
 settings:
   name: mysystem
-  base: ghcr.io/nomira-os/arch-base:sha-15a1ff2
+  base: ghcr.io/nomira-os/arch-base:sha-38dff06
 
 phases:
   - name: packages

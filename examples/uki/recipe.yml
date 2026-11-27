@@ -1,4 +1,4 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-5184de4
+# syntax=ghcr.io/nomira-os/nomira:sha-1a6db4e
 #
 # A system for a real machine: firmware, network, SSH, an editor, all
 # languages, the recipe itself in /etc/nomira, and a unified kernel image
@@ -6,7 +6,9 @@
 # See README.md for what to adapt.
 settings:
   name: mysystem
-  base: ghcr.io/nomira-os/arch-base:sha-15a1ff2
+  base: ghcr.io/nomira-os/arch-base:sha-38dff06
+  # Everything that shapes the image is here, nothing comes from flags.
+  compression: zstd
 
 prepare:
   # The initramfs for the unified kernel image, built from the system after
