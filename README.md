@@ -12,8 +12,8 @@ settings:
 ```
 
 No release has been published yet. Until then only development builds
-`sha-<commit>` exist, see
-[Packages](https://github.com/orgs/Nomira-OS/packages).
+exist: `sha-<commit>` for every commit on `main`, and `latest` for the
+newest of them, see [Packages](https://github.com/orgs/Nomira-OS/packages).
 
 ## Content
 
@@ -60,7 +60,8 @@ snapshot.
 
 Releases are published as `<version>` and also as
 `<version>-<snapshot date>`, for example `0.2.0` and `0.2.0-2026.11.13`.
-There is deliberately no `latest` tag.
+`latest` follows `main` and is meant for trying things out: a recipe
+that should build the same tomorrow names a release or a `sha-…` tag.
 
 The mirrorlist in the image points to the same snapshot. A `pacman -S`
 in a recipe therefore installs from the same package set as the base

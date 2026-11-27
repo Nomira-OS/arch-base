@@ -72,5 +72,8 @@ jobs:
       source-date-epoch: ${{ needs.versions.outputs.source-date-epoch }}
       # Per-package layers: an update downloads the packages that changed.
       chunk-layers: 64
-      tags: ${{ needs.versions.outputs.sha-tag }}
+      # latest follows main, for trying things out; recipes pin sha-….
+      tags: |
+        ${{ needs.versions.outputs.sha-tag }}
+        latest
       push: ${{ github.event_name != 'pull_request' }}
