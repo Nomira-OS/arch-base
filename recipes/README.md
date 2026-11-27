@@ -6,9 +6,10 @@ its own way; these are a start.
 
 | Part | What it adds |
 |---|---|
-| [`mounts.yml`](mounts.yml) | `settings.mounts`: logs and temporary files to a tmpfs, pacman's downloads to a BuildKit cache |
+| [`mounts.yml`](mounts.yml) | `settings.mounts`: logs and temporary files to a tmpfs, pacman's downloads and the initramfs cache to BuildKit caches |
 | [`packages.yml`](packages.yml) | The collector `packages`: one `pacman -S` for everything the groups name, with the keyring in a cache. Imports `mounts.yml` |
 | [`services.yml`](services.yml) | The collector `services`: one `systemctl enable`. Imports `packages.yml` |
+| [`initramfs.yml`](initramfs.yml) | The phase `initramfs`: the initramfs once more, for configuration copied after the packages (keymap, dracut options); near free when nothing changed. Import it after `services.yml` |
 | [`lint.yml`](lint.yml) | The phase `lint`: `bootc container lint` on the finished system |
 | [`uki.yml`](uki.yml) | The phases `kernel` and `uki`: a unified kernel image, as bootc builds a sealed image. Needs `services.yml`; import it last |
 

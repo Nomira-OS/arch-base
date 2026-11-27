@@ -1,0 +1,143 @@
+#!/bin/sh
+# nomira-initramfs: keeps /usr/lib/modules/<kver>/initramfs.img current,
+# without running dracut when nothing it would read has changed.
+#
+# Called by the pacman hook 90-nomira-initramfs.hook, by the base image's
+# own build, and by recipes (recipes/initramfs.yml) after they copied
+# configuration that belongs into the initramfs.
+#
+# For every kernel it looks for a cached initramfs in the cache directory,
+# a BuildKit cache mount of the recipe (recipes/mounts.yml). An entry is
+# found by a fingerprint of what decides which files dracut takes: kernel
+# version, SOURCE_DATE_EPOCH, dracut's configuration (by content), and the
+# trees below /usr/lib/modules/<kver>, /usr/lib/firmware and
+# /usr/lib/dracut and the configuration in /etc that dracut takes (path,
+# size, mtime, mode, owner). It is used only if
+# every file it contains still has the same path, size, mtime, mode and
+# owner on the system: binaries and libraries included. Otherwise dracut
+# runs, and the result is stored. So the initramfs is the same as if
+# dracut had run, byte for byte, since dracut builds reproducibly.
+#
+# Without the cache mount, dracut always runs and nothing is stored: a
+# cache must never end up in the image.
+#
+# Environment, for tests: NOMIRA_INITRAMFS_ROOT (prefix of the system,
+# default /), NOMIRA_INITRAMFS_CACHE (a cache directory to use if it
+# exists, instead of the cache mount).
+set -eu
+
+root="${NOMIRA_INITRAMFS_ROOT:-}"
+modules="$root/usr/lib/modules"
+keep=8
+# Configuration in /etc that dracut's modules take when it exists. A file
+# that is already in the initramfs is covered anyway; these make one that
+# appears count as well.
+etc=""
+# Not /etc/systemd/system: enabling a service writes there.
+for p in "$root"/etc/vconsole.conf "$root"/etc/locale.conf "$root"/etc/modprobe.d \
+         "$root"/etc/modules-load.d "$root"/etc/sysctl.conf "$root"/etc/sysctl.d \
+         "$root"/etc/systemd/*.conf "$root"/etc/systemd/*.conf.d "$root"/etc/udev/udev.conf \
+         "$root"/etc/udev/rules.d "$root"/etc/cmdline.d "$root"/etc/crypttab "$root"/etc/fstab \
+         "$root"/etc/os-release; do
+  etc="$etc $p"
+done
+
+cache=""
+if [ -n "${NOMIRA_INITRAMFS_CACHE:-}" ]; then
+  [ -d "$NOMIRA_INITRAMFS_CACHE" ] && cache="$NOMIRA_INITRAMFS_CACHE"
+elif mountpoint -q /var/cache/nomira/initramfs 2>/dev/null; then
+  cache=/var/cache/nomira/initramfs
+fi
+
+# stat line for each path on stdin; a missing path gives its own line.
+stats() {
+  while IFS= read -r p; do
+    if [ -e "$root$p" ] || [ -L "$root$p" ]; then
+      stat -c '%n %s %Y %a %u %g %F' "$root$p"
+    else
+      echo "$p missing"
+    fi
+  done
+}
+
+# Fingerprint of what decides the content, for kernel $1.
+fingerprint() {
+  {
+    echo "kver $1"
+    echo "epoch ${SOURCE_DATE_EPOCH:-}"
+    for f in "$root"/usr/lib/dracut/dracut.conf.d/*.conf "$root"/etc/dracut.conf "$root"/etc/dracut.conf.d/*.conf; do
+      [ -f "$f" ] && { echo "conf $f"; cat "$f"; }
+    done
+    for d in "$modules/$1" "$root/usr/lib/firmware" "$root/usr/lib/dracut" $etc; do
+      # The initramfs itself (and its temporary copy) is the output.
+      # Files and links only: a directory's mtime changes with what is
+      # written next to it, the initramfs among them.
+      [ -e "$d" ] && find "$d" -xdev \( -type f -o -type l \) ! -path "$modules/$1/initramfs.img*" \
+        -printf '%p %s %T@ %m %U %G %y\n' | LC_ALL=C sort
+    done
+  } | sha256sum | cut -d' ' -f1
+}
+
+# The host paths whose files are in initramfs $1, one per line.
+contents() {
+  tmp="$(mktemp -d)"
+  ( cd "$tmp" && lsinitrd --unpack "$1" > /dev/null 2>&1 ) || { rm -rf "$tmp"; return 1; }
+  ( cd "$tmp" && find . \( -type f -o -type l \) -printf '/%P\n' ) | LC_ALL=C sort
+  rm -rf "$tmp"
+}
+
+build() { # kver output
+  dracut --force --tmpdir /tmp --kver "$1" "$2"
+}
+
+for d in "$modules"/*/; do
+  [ -d "$d" ] || continue
+  kver="$(basename "$d")"
+  img="${d}initramfs.img"
+  if [ ! -e "${d}vmlinuz" ]; then
+    rm -f "$img"
+    continue
+  fi
+  if [ -z "$cache" ]; then
+    build "$kver" "$img"
+    continue
+  fi
+  fp="$(fingerprint "$kver")"
+  entry="$cache/$fp"
+  if [ -f "$entry/initramfs.img" ] && [ -f "$entry/files" ] && [ -f "$entry/stats" ] &&
+     [ "$(stats < "$entry/files" | sha256sum)" = "$(cat "$entry/stats")" ]; then
+    # Written only if it differs: a rewritten file would be in the layer
+    # of this step, unchanged or not.
+    if [ -f "$img" ] && [ "$(sha256sum < "$img")" = "$(sha256sum < "$entry/initramfs.img")" ]; then
+      echo "nomira-initramfs: $kver: unchanged"
+    else
+      echo "nomira-initramfs: $kver: taken from the cache"
+      cp "$entry/initramfs.img" "$img.new" && mv "$img.new" "$img"
+    fi
+    touch "$entry"
+    continue
+  fi
+  build "$kver" "$img"
+  # Store it: only the paths that exist on the system count; files that
+  # dracut generates are covered by the fingerprint.
+  new="$cache/.new-$fp-$$"
+  rm -rf "$new" && mkdir -p "$new"
+  if contents "$img" > "$new/all"; then
+    while IFS= read -r p; do
+      if [ -e "$root$p" ] || [ -L "$root$p" ]; then echo "$p"; fi
+    done < "$new/all" > "$new/files"
+    rm -f "$new/all"
+    stats < "$new/files" | sha256sum > "$new/stats"
+    cp "$img" "$new/initramfs.img"
+    rm -rf "$entry" && mv "$new" "$entry"
+  else
+    rm -rf "$new"
+  fi
+done
+
+# Keep the newest entries only.
+if [ -n "$cache" ]; then
+  ls -1t "$cache" 2>/dev/null | tail -n +$((keep + 1)) | while IFS= read -r e; do
+    rm -rf "${cache:?}/$e"
+  done
+fi

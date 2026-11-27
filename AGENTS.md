@@ -19,6 +19,8 @@ Sibling repositories: `nomira` (BuildKit frontend), `nomira-cli`,
 - `versions.env`: everything that determines the content.
   `hack/build-args.sh` turns it into build arguments, deriving the
   snapshot date and `SOURCE_DATE_EPOCH` from the tag of `ARCH_IMAGE`.
+- `files/initramfs`: keeps the initramfs current, from a recipe's cache
+  when nothing it contains changed; tested by `hack/test-initramfs.sh`.
 - `files/pacman-build`: pacman for the build steps (keyring in a tmpfs,
   retries, reproducible install dates); mounted, not part of the image.
 - `recipes/`: parts of recipes, imported by URL pinned to a commit.

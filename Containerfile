@@ -138,12 +138,16 @@ RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
 # masked, and one hook with the same triggers rebuilds
 # /usr/lib/modules/<kver>/initramfs.img instead (files/pacman-hooks). A
 # recipe therefore never decides which packages need a new initramfs.
-# The base image builds its own below, after bootc.
+# The hook runs files/initramfs, /usr/lib/nomira/initramfs in the image,
+# which takes an unchanged initramfs from a recipe's cache mount instead
+# of running dracut again (see the script). The base image builds its own
+# below, after bootc, with the same script and without a cache.
 #
 # A second hook sets the install dates in pacman's database to
 # SOURCE_DATE_EPOCH, so that recipe layers do not depend on the build
 # time.
 COPY files/pacman-hooks/zz-nomira-installdate.hook /usr/share/libalpm/hooks/
+COPY --chmod=0755 files/initramfs /usr/lib/nomira/initramfs
 RUN --mount=type=bind,source=files/pacman-hooks/initramfs.action,target=/tmp/initramfs.action \
     hooks="$(grep -lis '^ *Exec *=.*dracut' /usr/share/libalpm/hooks/*.hook)" && \
     [ -n "$hooks" ] || { echo "no dracut hooks found in /usr/share/libalpm/hooks" >&2; exit 1; }; \
@@ -233,9 +237,7 @@ RUN mkdir -p /usr/lib/dracut/dracut.conf.d && \
 # bootc, then the initramfs, which contains bootc's dracut module.
 COPY --from=bootc-build /output /
 RUN --mount=type=tmpfs,target=/tmp --mount=type=tmpfs,target=/root \
-    for dir in /usr/lib/modules/*/; do \
-        dracut --force --kver "$(basename "$dir")" "${dir}initramfs.img"; \
-    done && \
+    /usr/lib/nomira/initramfs && \
     img="$(echo /usr/lib/modules/*/initramfs.img)" && \
     for f in systemd-gpt-auto-generator systemd-cryptsetup libtss2-esys; do \
         lsinitrd "$img" | grep -q "$f" || { echo "initramfs lacks $f" >&2; exit 1; }; \

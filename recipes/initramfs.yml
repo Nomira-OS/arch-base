@@ -1,0 +1,11 @@
+# The initramfs once more, late: for configuration the recipe copied after
+# the packages that belongs into it, such as /etc/vconsole.conf (keymap)
+# or a file in /etc/dracut.conf.d. The packages' own hook already keeps
+# the initramfs current with them; this phase costs next to nothing when
+# nothing changed, since /usr/lib/nomira/initramfs takes an unchanged
+# initramfs from the cache. Import it after services.yml and before
+# lint.yml and uki.yml.
+imports: [mounts.yml]
+build:
+  initramfs:
+    initramfs: ["run /usr/lib/nomira/initramfs"]
