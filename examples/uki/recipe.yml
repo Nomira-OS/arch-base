@@ -10,9 +10,9 @@
 # container lint), kernel and uki (the unified kernel image), with the
 # mounts every run gets.
 imports:
-  - https://raw.githubusercontent.com/Nomira-OS/arch-base/f1142efa8afc33f89ea0cf9341f4f9cce57cc190/recipes/services.yml
-  - https://raw.githubusercontent.com/Nomira-OS/arch-base/f1142efa8afc33f89ea0cf9341f4f9cce57cc190/recipes/lint.yml
-  - https://raw.githubusercontent.com/Nomira-OS/arch-base/f1142efa8afc33f89ea0cf9341f4f9cce57cc190/recipes/uki.yml    # last: the UKI is built from the finished system
+  - https://raw.githubusercontent.com/Nomira-OS/arch-base/8d6d40c9a63f3eb8cc4f6d3fbbea3f3b71ae01f9/recipes/services.yml
+  - https://raw.githubusercontent.com/Nomira-OS/arch-base/8d6d40c9a63f3eb8cc4f6d3fbbea3f3b71ae01f9/recipes/lint.yml
+  - https://raw.githubusercontent.com/Nomira-OS/arch-base/8d6d40c9a63f3eb8cc4f6d3fbbea3f3b71ae01f9/recipes/uki.yml    # last: the UKI is built from the finished system
 
 settings:
   base: ghcr.io/nomira-os/arch-base:sha-e6e58a9
