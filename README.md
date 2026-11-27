@@ -25,17 +25,22 @@ newest of them, see [Packages](https://github.com/orgs/Nomira-OS/packages).
 | Hardening | `apparmor`, active at boot |
 | nomira tools | `podman`, `passt`, `buildkit`, `sudo`, the nomira CLI |
 
-Deliberately not included: network management, firmware, SSH, a desktop
-and the boot test with bcvk (it would need QEMU). The recipe chooses
-those.
+Deliberately not included: network management, firmware, SSH, a
+desktop. The recipe chooses those.
 
 buildkitd runs as root and only on demand: `buildkit.socket` is enabled
 and starts the daemon as soon as `sudo nomira build` talks to it.
 
-## Examples
+## Recipe parts and examples
 
-[`examples/`](examples/) holds recipes built on this image, from a minimal
-one to a complete system with a unified kernel image. CI lints them.
+The image carries no part of a recipe, so a recipe can do everything its
+own way. [`recipes/`](recipes/) holds parts to import by URL instead:
+mounts, the collectors `packages` and `services`, a unified kernel image,
+`bootc container lint`. A few imports and a recipe is ready to build.
+
+[`examples/`](examples/) holds recipes built on this image and these
+parts, from a minimal one to a complete system with a unified kernel
+image. CI lints both.
 
 ## Pinned state
 

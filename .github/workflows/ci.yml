@@ -16,19 +16,49 @@ jobs:
   checks:
     uses: Nomira-OS/ci/.github/workflows/checks.yml@main
 
-  # The example recipes must stay valid for the frontend they name.
+  # The example recipes must stay valid for the frontend they name, and
+  # the recipe parts in recipes/ for the frontend of the examples. Linting
+  # goes through BuildKit, as `nomira lint` does; imports by URL are
+  # fetched there.
   examples:
     runs-on: ubuntu-26.04
+    env:
+      # renovate: datasource=docker depName=moby/buildkit
+      BUILDKIT_VERSION: v0.35.1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Lint the example recipes
+      - name: Start BuildKit
+        run: |
+          docker run -d --name buildkitd --privileged -v "$PWD:/src:ro" "moby/buildkit:${BUILDKIT_VERSION}"
+          for i in $(seq 1 30); do
+            docker exec buildkitd buildctl debug workers >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          docker logs buildkitd
+          exit 1
+      - name: Lint the example recipes and the recipe parts
         run: |
           set -eu
+          lint() { # <directory below the checkout> <frontend image>
+            echo "== $1/recipe.yml ($2)"
+            docker exec buildkitd buildctl build \
+              --frontend gateway.v0 --opt source="$2" \
+              --local context="/src/$1" --local dockerfile="/src/$1" \
+              --opt filename=recipe.yml --opt mode=lint \
+              --output type=local,dest=/tmp/lint
+          }
           for f in examples/*/recipe.yml; do
-            img="$(sed -n '1s/^# syntax=//p' "$f")"
-            echo "== $f ($img)"
-            docker run --rm -v "$PWD/$(dirname "$f"):/recipe:ro" "$img" lint /recipe/recipe.yml
+            lint "$(dirname "$f")" "$(sed -n '1s/^# syntax=//p' "$f")"
           done
+          # The parts as they are in this commit, all of them imported.
+          mkdir -p .lint-parts
+          cp -r recipes .lint-parts/
+          {
+            echo "imports: [recipes/uki.yml, recipes/lint.yml]"
+            echo "settings: {base: $(sed -n 's/^  base: //p' examples/minimal/recipe.yml)}"
+            echo "build: {packages: {}, features: {g: {packages: [nano]}}}"
+          } > .lint-parts/recipe.yml
+          lint .lint-parts "$(sed -n '1s/^# syntax=//p' examples/minimal/recipe.yml)"
 
   versions:
     runs-on: ubuntu-26.04

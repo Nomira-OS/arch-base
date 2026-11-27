@@ -21,8 +21,11 @@ Sibling repositories: `nomira` (BuildKit frontend), `nomira-cli`,
   snapshot date and `SOURCE_DATE_EPOCH` from the tag of `ARCH_IMAGE`.
 - `files/pacman-build`: pacman for the build steps (keyring in a tmpfs,
   retries, reproducible install dates); mounted, not part of the image.
-- `examples/`: example recipes, one directory each; the `examples` CI
-  job lints them with the frontend named in their `# syntax=` line.
+- `recipes/`: parts of recipes, imported by URL pinned to a commit.
+- `examples/`: example recipes, one directory each, built on those parts;
+  the `examples` CI job lints them through BuildKit with the frontend
+  named in their `# syntax=` line, and the parts as they are in the
+  commit.
 - `files/`: files copied into the image.
 - `.github/workflows/`: `ci` (build and publish `sha-<commit>`),
   `release` (manual, beta or final), `repro` (manual: two builds without
@@ -44,8 +47,9 @@ and takes around 20 minutes without cache.
 
 - **Minimalism is the point.** Do not add a package unless bootc cannot
   boot or install without it, or it belongs to the nomira toolchain.
-  Network management, firmware, ssh, desktops and the bcvk boot test
-  (it needs QEMU) belong in recipes.
+  Network management, firmware, ssh and desktops belong in recipes.
+- **No recipe parts in the image.** Parts for recipes live in `recipes/`
+  and are imported by URL; the image never ships or assumes them.
 - **Everything is pinned in `versions.env`, and there is one date.** The
   date in the tag of `ARCH_IMAGE` is the Arch Linux Archive snapshot and
   `SOURCE_DATE_EPOCH`; never define either a second time. The mirrorlist

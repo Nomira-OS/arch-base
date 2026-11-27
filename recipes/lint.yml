@@ -1,0 +1,5 @@
+# bootc's checks of the finished image, as the last phase: a failing check
+# stops the build, so nothing that fails it is published. Import it last.
+build:
+  lint:
+    bootc: ["run bootc container lint"]

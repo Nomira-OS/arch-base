@@ -1,0 +1,12 @@
+# The collector "packages": every package any group names, in one pacman
+# run. Which of them need a new initramfs is not the recipe's business:
+# pacman hooks in the base image rebuild it whenever a package changes what
+# goes into it. The pacman keyring is kept in a BuildKit cache on the build
+# machine, like the keyring of any Arch system; it never enters the image.
+imports: [mounts.yml]
+build:
+  packages:
+    collect: >-
+      run --mount=type=cache,target=/etc/pacman.d/gnupg,id=pacman-keyring,sharing=locked
+      { [ -s /etc/pacman.d/gnupg/trustdb.gpg ] || pacman-key --init; } &&
+      pacman-key --populate && pacman -S --needed --noconfirm ${items}

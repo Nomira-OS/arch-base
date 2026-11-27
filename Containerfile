@@ -103,9 +103,9 @@ ARG SOURCE_DATE_EPOCH
 # the first install. pacman's database describes the image, so it moves to
 # /usr/lib/sysimage, where pacman keeps working in builds on top. Cache and
 # log stay where Arch has them, in /var/cache and /var/log: machine state.
-# The nomira frontend gives every run of a recipe a tmpfs there, so they
-# never end up in an image; a recipe mounts a BuildKit cache at
-# /var/cache/pacman/pkg to keep downloads across builds.
+# Recipes keep them out of their images with settings.mounts, a tmpfs
+# there and a BuildKit cache at /var/cache/pacman/pkg, as recipes/mounts.yml
+# does.
 RUN mkdir -p /usr/lib/sysimage/lib && \
     mv -v /var/lib/pacman /usr/lib/sysimage/lib/pacman && \
     sed -i 's@^#*[[:space:]]*DBPath[[:space:]]*=.*@DBPath = /usr/lib/sysimage/lib/pacman/@' /etc/pacman.conf && \

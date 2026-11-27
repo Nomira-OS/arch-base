@@ -1,0 +1,17 @@
+# A unified kernel image, as bootc builds a sealed image: kernel and
+# initramfs leave the image (they are inside the UKI), and the UKI is
+# built from the system without them, with kernel and initramfs as the
+# packages left them after the phase services. Nothing is rebuilt here.
+imports: [services.yml]
+build:
+  kernel:
+    out: ["run rm /usr/lib/modules/*/vmlinuz /usr/lib/modules/*/initramfs.img"]
+  uki:
+    uki:
+      - >-
+        run --mount=type=bind,from=kernel,target=/target
+        --mount=type=bind,from=services,source=/usr/lib/modules,target=/kernels
+        mkdir -p /boot/EFI/Linux &&
+        for d in /kernels/*; do
+        bootc container ukify --rootfs /target --kernel-dir "$d" --erofs-version v1-only --
+        --output "/boot/EFI/Linux/$(basename "$d").efi"; done

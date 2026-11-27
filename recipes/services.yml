@@ -1,0 +1,6 @@
+# The collector "services": every systemd unit any group names, enabled in
+# one run, after the packages that bring them.
+imports: [packages.yml]
+build:
+  services:
+    collect: run systemctl enable ${items}
