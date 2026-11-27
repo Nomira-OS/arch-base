@@ -1,25 +1,21 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-434c4f5
+# syntax=ghcr.io/nomira-os/nomira:sha-64866c7
 #
 # The smallest useful system: the base image plus a network service.
 # Language, keymap, time zone, root password and the first user are
 # asked at the first boot.
+#
+# The collectors packages and services, the mounts and bootc's lint come
+# from recipes/ of arch-base, pinned to a commit.
+imports:
+  - https://raw.githubusercontent.com/Nomira-OS/arch-base/1411e93895fd5905ded7ab547e4cbfd82ffa6fa0/recipes/services.yml
+  - https://raw.githubusercontent.com/Nomira-OS/arch-base/1411e93895fd5905ded7ab547e4cbfd82ffa6fa0/recipes/lint.yml
+
 settings:
-  name: mysystem
-  base: ghcr.io/nomira-os/arch-base:sha-33740cd
+  base: ghcr.io/nomira-os/arch-base:sha-1411e93
 
 build:
-  packages:
-    collect: >-
-      run --mount=type=tmpfs,target=/etc/pacman.d/gnupg
-      --mount=type=cache,target=/var/cache/pacman/pkg
-      pacman-key --init && pacman-key --populate &&
-      pacman -S --needed --noconfirm ${items}
-
+  packages: {}            # features comes after packages (and before services)
   features:
-    groups:
-      network:
-        packages: [networkmanager]
-        services: [NetworkManager.service]
-
-  services:
-    collect: run systemctl enable ${items}
+    network:
+      packages: [networkmanager]
+      services: [NetworkManager.service]

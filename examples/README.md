@@ -1,7 +1,9 @@
 # Example recipes
 
 Recipes built on this image, each in its own directory. Copy one as a
-starting point. CI checks every one with `nomira lint`.
+starting point. Both import the parts in [`recipes/`](../recipes/) by
+URL, pinned to a commit, and add their own groups. CI lints every one
+through BuildKit, as `nomira lint` does.
 
 | Example | What it is |
 |---|---|
@@ -27,7 +29,8 @@ version control next to the recipe.
   one of them changes; the downloads come from the cache, but unpacking,
   the hooks and, with firmware among them, a new initramfs take time.
   If that matters, move what rarely changes (firmware, microcode) to a
-  second collector phase before `packages`, with the same command; see
+  second collector in a phase before `packages`, with the same command;
+  see
   [Large collectors](https://nomira-os.github.io/nomira-web/docs/recipes/rebuilds/#large-collectors).
   The result is the same either way.
 - **`network`**: NetworkManager is an example; any option from
@@ -42,6 +45,11 @@ version control next to the recipe.
 - **Files**: `copy files/… /etc/…` in any group. The record picks up
   every file the recipe copies.
 
-The tags in the `# syntax=` and `base:` lines are the ones the examples
-were last checked with; newer ones are on the
-[package pages](https://github.com/orgs/Nomira-OS/packages).
+- **Order of phases:** `packages: {}` in the recipe names a phase the
+  imports already have, so that `features` comes right after it; a new
+  phase goes after the one before it in its own file. Without that line
+  `features` would come last, after the unified kernel image.
+
+The tags in the `# syntax=` and `base:` lines, and the commit in the
+URLs, are the ones the examples were last checked with; newer ones are
+on the [package pages](https://github.com/orgs/Nomira-OS/packages).

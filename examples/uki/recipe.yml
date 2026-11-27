@@ -1,64 +1,40 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-434c4f5
+# syntax=ghcr.io/nomira-os/nomira:sha-64866c7
 #
 # A system for a real machine: firmware, network, SSH, an editor, all
 # languages, and a unified kernel image. The image carries this recipe in
 # its label org.nomira.recipe; `nomira recipe export` prints it. See
 # README.md for what to adapt.
+#
+# The phases come from recipes/ of arch-base, pinned to a commit:
+# packages and services (collectors), kernel and uki (the unified kernel
+# image), lint (bootc container lint), with the mounts every run gets.
+imports:
+  - https://raw.githubusercontent.com/Nomira-OS/arch-base/1411e93895fd5905ded7ab547e4cbfd82ffa6fa0/recipes/uki.yml
+  - https://raw.githubusercontent.com/Nomira-OS/arch-base/1411e93895fd5905ded7ab547e4cbfd82ffa6fa0/recipes/lint.yml
+
 settings:
-  name: mysystem
-  base: ghcr.io/nomira-os/arch-base:sha-33740cd
+  base: ghcr.io/nomira-os/arch-base:sha-1411e93
   # Without source_date_epoch the base image's creation time is used.
-  # Layer compression, secrets and the like are options of the client:
-  # see nomira.conf in the nomira CLI.
+  # The image name, layer compression, secrets and the like are options
+  # of the client: see nomira.conf in the nomira CLI.
 
 build:
-  # All packages of all groups, in one pacman run. Which of them need a
-  # new initramfs is not the recipe's business: pacman hooks in the base
-  # image rebuild it whenever a package changes what goes into it. The
-  # pacman keyring is kept in a BuildKit cache on the build machine, like
-  # the keyring of any Arch system; it never enters the image.
-  packages:
-    collect: >-
-      run --mount=type=cache,target=/etc/pacman.d/gnupg,id=pacman-keyring,sharing=locked
-      --mount=type=cache,target=/var/cache/pacman/pkg
-      { [ -s /etc/pacman.d/gnupg/trustdb.gpg ] || pacman-key --init; } &&
-      pacman-key --populate && pacman -S --needed --noconfirm ${items}
-
+  # A phase that an import already has is named here to place the next
+  # one: features comes after packages, and so before services, kernel
+  # and uki, which build the UKI from the finished system.
+  packages: {}
   features:
-    groups:
-      hardware:
-        # linux-firmware would pull in the firmware for every vendor;
-        # the split packages keep the image, and every build, smaller.
-        packages: [linux-firmware-intel, intel-ucode]
-      network:
-        packages: [networkmanager]
-        services: [NetworkManager.service]
-      ssh:
-        packages: [openssh]
-        services: [sshd.service]
-      editor:
-        packages: [nano]
-      language:
-        packages: [glibc-locales]
-
-  services:
-    collect: run systemctl enable ${items}
-
-  # The unified kernel image, as bootc builds a sealed image: kernel and
-  # initramfs leave the image (they are inside the UKI), and the UKI is
-  # built from the system without them, with kernel and initramfs as the
-  # packages left them after the phase services. Nothing is rebuilt here.
-  kernel:
-    groups:
-      out: ["run rm /usr/lib/modules/*/vmlinuz /usr/lib/modules/*/initramfs.img"]
-
-  uki:
-    groups:
-      uki:
-        - >-
-          run --mount=type=bind,from=kernel,target=/target
-          --mount=type=bind,from=services,source=/usr/lib/modules,target=/kernels
-          mkdir -p /boot/EFI/Linux &&
-          for d in /kernels/*; do
-          bootc container ukify --rootfs /target --kernel-dir "$d" --erofs-version v1-only --
-          --output "/boot/EFI/Linux/$(basename "$d").efi"; done
+    hardware:
+      # linux-firmware would pull in the firmware for every vendor;
+      # the split packages keep the image, and every build, smaller.
+      packages: [linux-firmware-intel, intel-ucode]
+    network:
+      packages: [networkmanager]
+      services: [NetworkManager.service]
+    ssh:
+      packages: [openssh]
+      services: [sshd.service]
+    editor:
+      packages: [nano]
+    language:
+      packages: [glibc-locales]
