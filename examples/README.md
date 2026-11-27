@@ -20,11 +20,13 @@ On the first boot the base image copies it to `/etc/nomira`, where
   `linux-firmware-amdgpu`, `linux-firmware-realtek`, …); see
   [Linux firmware](https://wiki.archlinux.org/title/Linux_firmware) and
   [Microcode](https://wiki.archlinux.org/title/Microcode).
-- **`firmware` or `packages`**: both collectors install the same way,
-  and the base image rebuilds the initramfs whenever a package changes
-  what goes into it, wherever the package is listed. The only difference
-  is the build cache: a collector installs all of its packages again when
-  one of them changes, so put what rarely changes under `firmware:`.
+- **Build time:** a collector installs all of its packages again when
+  one of them changes; the downloads come from the cache, but unpacking,
+  the hooks and, with firmware among them, a new initramfs take time.
+  If that matters, move what rarely changes (firmware, microcode) to a
+  second collector before `packages`, with the same command; see
+  [Large collectors](https://nomira-os.github.io/nomira-web/docs/recipes/rebuilds/#large-collectors).
+  The result is the same either way.
 - **`network`**: NetworkManager is an example; any option from
   [Network configuration](https://wiki.archlinux.org/title/Network_configuration)
   works the same way.

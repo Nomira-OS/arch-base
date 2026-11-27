@@ -1,4 +1,4 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-815d9e2
+# syntax=ghcr.io/nomira-os/nomira:sha-051c82c
 #
 # A system for a real machine: firmware, network, SSH, an editor, all
 # languages, and a unified kernel image. The image carries this recipe in
@@ -6,30 +6,21 @@
 # own recipe in /etc/nomira. See README.md for what to adapt.
 settings:
   name: mysystem
-  base: ghcr.io/nomira-os/arch-base:sha-1cd855e
+  base: ghcr.io/nomira-os/arch-base:sha-e9d5101
   # Everything that shapes the image is here, nothing comes from flags.
   # Without source_date_epoch the base image's creation time is used.
   compression: zstd
 
 phases:
-  # Two collectors with the same command. Which packages need a new
-  # initramfs is not the recipe's business: pacman hooks in the base image
-  # rebuild it whenever a package changes what goes into it. The split is
-  # only for the build cache: a collector installs all of its packages
-  # again when one changes, so the ones that rarely change come first.
-  # The pacman keyring is kept in a BuildKit cache on the build machine,
-  # like the keyring of any Arch system; it never enters the image.
-  - name: firmware
-    collect: >-
-      run --mount=type=cache,target=/etc/pacman.d/gnupg,id=pacman-keyring,sharing=locked
-      --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg
-      { [ -s /etc/pacman.d/gnupg/trustdb.gpg ] || pacman-key --init; } &&
-      pacman-key --populate && pacman -S --needed --noconfirm ${items}
-
+  # All packages of all groups, in one pacman run. Which of them need a
+  # new initramfs is not the recipe's business: pacman hooks in the base
+  # image rebuild it whenever a package changes what goes into it. The
+  # pacman keyring is kept in a BuildKit cache on the build machine, like
+  # the keyring of any Arch system; it never enters the image.
   - name: packages
     collect: >-
       run --mount=type=cache,target=/etc/pacman.d/gnupg,id=pacman-keyring,sharing=locked
-      --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg
+      --mount=type=cache,target=/var/cache/pacman/pkg
       { [ -s /etc/pacman.d/gnupg/trustdb.gpg ] || pacman-key --init; } &&
       pacman-key --populate && pacman -S --needed --noconfirm ${items}
 
@@ -38,7 +29,7 @@ phases:
       hardware:
         # linux-firmware would pull in the firmware for every vendor;
         # the split packages keep the image, and every build, smaller.
-        firmware: [linux-firmware-intel, intel-ucode]
+        packages: [linux-firmware-intel, intel-ucode]
       network:
         packages: [networkmanager]
         services: [NetworkManager.service]
