@@ -1,39 +1,31 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-1a6db4e
+# syntax=ghcr.io/nomira-os/nomira:sha-8357a4b
 #
 # A system for a real machine: firmware, network, SSH, an editor, all
-# languages, the recipe itself in /etc/nomira, and a unified kernel image
-# whose initramfs is only rebuilt when the packages boot needs change.
-# See README.md for what to adapt.
+# languages, and a unified kernel image. The image carries this recipe in
+# /usr/share/nomira/recipe; on the first boot it becomes the machine's
+# own recipe in /etc/nomira. See README.md for what to adapt.
 settings:
   name: mysystem
-  base: ghcr.io/nomira-os/arch-base:sha-38dff06
+  base: ghcr.io/nomira-os/arch-base:sha-1cd855e
   # Everything that shapes the image is here, nothing comes from flags.
+  # Without source_date_epoch the base image's creation time is used.
   compression: zstd
 
-prepare:
-  # The initramfs for the unified kernel image, built from the system after
-  # the phase boot: only when boot changes, and never part of the image.
-  initramfs:
-    from: boot
-    commands:
-      - >-
-        run --mount=type=tmpfs,target=/tmp mkdir /out &&
-        for d in /usr/lib/modules/*/; do k="$(basename "$d")";
-        TMPDIR=/tmp SOURCE_DATE_EPOCH=0 dracut --kver "$k" "/out/$k.img"; done &&
-        sha256sum /out/*.img
-
 phases:
-  # What boot needs: firmware, microcode, anything the initramfs must
-  # contain. The pacman keyring is kept in a BuildKit cache on the build
-  # machine, like the keyring of any Arch system; it never enters the image.
-  - name: boot
+  # Two collectors with the same command. Which packages need a new
+  # initramfs is not the recipe's business: pacman hooks in the base image
+  # rebuild it whenever a package changes what goes into it. The split is
+  # only for the build cache: a collector installs all of its packages
+  # again when one changes, so the ones that rarely change come first.
+  # The pacman keyring is kept in a BuildKit cache on the build machine,
+  # like the keyring of any Arch system; it never enters the image.
+  - name: firmware
     collect: >-
       run --mount=type=cache,target=/etc/pacman.d/gnupg,id=pacman-keyring,sharing=locked
       --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg
       { [ -s /etc/pacman.d/gnupg/trustdb.gpg ] || pacman-key --init; } &&
       pacman-key --populate && pacman -S --needed --noconfirm ${items}
 
-  # Everything else: a change here leaves the initramfs alone.
   - name: packages
     collect: >-
       run --mount=type=cache,target=/etc/pacman.d/gnupg,id=pacman-keyring,sharing=locked
@@ -46,7 +38,7 @@ phases:
       hardware:
         # linux-firmware would pull in the firmware for every vendor;
         # the split packages keep the image, and every build, smaller.
-        boot: [linux-firmware-intel, intel-ucode]
+        firmware: [linux-firmware-intel, intel-ucode]
       network:
         packages: [networkmanager]
         services: [NetworkManager.service]
@@ -57,14 +49,16 @@ phases:
         packages: [nano]
       language:
         packages: [glibc-locales]
-      recipe:
-        - copy recipe.yml /etc/nomira/recipe.yml
 
   - name: services
     collect: run systemctl enable ${items}
 
-  # The unified kernel image, as bootc builds a sealed image: take kernel
-  # and initramfs out, then build the UKI from the system without them.
+  # The unified kernel image, as bootc builds a sealed image: kernel and
+  # initramfs leave the image (they are inside the UKI), and the UKI is
+  # built from the system without them, with kernel and initramfs as the
+  # packages left them after the phase services. Nothing is rebuilt here.
+  # The recipe record comes right before this phase, so the UKI's digest
+  # covers it.
   - name: kernel
     groups:
       out: ["run rm /usr/lib/modules/*/vmlinuz /usr/lib/modules/*/initramfs.img"]
@@ -74,11 +68,9 @@ phases:
       uki:
         - >-
           run --mount=type=bind,from=kernel,target=/target
-          --mount=type=bind,from=boot,source=/usr/lib/modules,target=/kernels
-          --mount=type=bind,from=initramfs,source=/out,target=/initramfs
+          --mount=type=bind,from=services,source=/usr/lib/modules,target=/kernels
           --mount=type=tmpfs,target=/tmp
           mkdir -p /boot/EFI/Linux &&
-          for d in /kernels/*; do k="$(basename "$d")"; mkdir "/tmp/$k" &&
-          cp "$d/vmlinuz" "/tmp/$k/" && cp "/initramfs/$k.img" "/tmp/$k/initramfs.img" &&
-          bootc container ukify --rootfs /target --kernel-dir "/tmp/$k" --erofs-version v1-only --
-          --output "/boot/EFI/Linux/$k.efi"; done
+          for d in /kernels/*; do
+          bootc container ukify --rootfs /target --kernel-dir "$d" --erofs-version v1-only --
+          --output "/boot/EFI/Linux/$(basename "$d").efi"; done
