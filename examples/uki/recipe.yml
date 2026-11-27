@@ -1,27 +1,29 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-64866c7
+# syntax=ghcr.io/nomira-os/nomira:sha-c816a36
 #
 # A system for a real machine: firmware, network, SSH, an editor, all
 # languages, and a unified kernel image. The image carries this recipe in
 # its label org.nomira.recipe; `nomira recipe export` prints it. See
 # README.md for what to adapt.
 #
-# The phases come from recipes/ of arch-base, pinned to a commit:
-# packages and services (collectors), kernel and uki (the unified kernel
-# image), lint (bootc container lint), with the mounts every run gets.
+# The phases come from recipes/ of arch-base, pinned to a commit, in the
+# order of the imports: packages and services (collectors), lint (bootc
+# container lint), kernel and uki (the unified kernel image), with the
+# mounts every run gets.
 imports:
-  - https://raw.githubusercontent.com/Nomira-OS/arch-base/1411e93895fd5905ded7ab547e4cbfd82ffa6fa0/recipes/uki.yml
-  - https://raw.githubusercontent.com/Nomira-OS/arch-base/1411e93895fd5905ded7ab547e4cbfd82ffa6fa0/recipes/lint.yml
+  - https://raw.githubusercontent.com/Nomira-OS/arch-base/f1142efa8afc33f89ea0cf9341f4f9cce57cc190/recipes/services.yml
+  - https://raw.githubusercontent.com/Nomira-OS/arch-base/f1142efa8afc33f89ea0cf9341f4f9cce57cc190/recipes/lint.yml
+  - https://raw.githubusercontent.com/Nomira-OS/arch-base/f1142efa8afc33f89ea0cf9341f4f9cce57cc190/recipes/uki.yml    # last: the UKI is built from the finished system
 
 settings:
-  base: ghcr.io/nomira-os/arch-base:sha-1411e93
+  base: ghcr.io/nomira-os/arch-base:sha-f1142ef
   # Without source_date_epoch the base image's creation time is used.
   # The image name, layer compression, secrets and the like are options
   # of the client: see nomira.conf in the nomira CLI.
 
 build:
   # A phase that an import already has is named here to place the next
-  # one: features comes after packages, and so before services, kernel
-  # and uki, which build the UKI from the finished system.
+  # one: features comes after packages, and so before services, lint,
+  # kernel and uki.
   packages: {}
   features:
     hardware:
