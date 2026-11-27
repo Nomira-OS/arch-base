@@ -1,4 +1,4 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-367f87a
+# syntax=ghcr.io/nomira-os/nomira:sha-434c4f5
 #
 # A system for a real machine: firmware, network, SSH, an editor, all
 # languages, and a unified kernel image. The image carries this recipe in
@@ -7,9 +7,9 @@
 settings:
   name: mysystem
   base: ghcr.io/nomira-os/arch-base:sha-492224c
-  # Everything that shapes the image is here, nothing comes from flags.
   # Without source_date_epoch the base image's creation time is used.
-  compression: zstd
+  # Layer compression, secrets and the like are options of the client:
+  # see nomira.conf in the nomira CLI.
 
 build:
   # All packages of all groups, in one pacman run. Which of them need a

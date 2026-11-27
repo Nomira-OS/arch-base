@@ -1,4 +1,4 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-367f87a
+# syntax=ghcr.io/nomira-os/nomira:sha-434c4f5
 #
 # The smallest useful system: the base image plus a network service.
 # Language, keymap, time zone, root password and the first user are

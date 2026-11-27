@@ -71,6 +71,8 @@ RUN test -n "$BOOTC_REF" && \
         CARGO_OPTIONS='--no-default-features --features "install-to-disk pre-6.15"'
 
 # --- nomira CLI (optional) ---------------------------------------------------
+# The CLI reports a release tag as its version (nomira version), any other
+# commit as sha-<commit>, which Go records from the checkout.
 FROM base AS cli-build
 ARG NOMIRA_CLI_REF
 ARG SOURCE_DATE_EPOCH
@@ -81,7 +83,9 @@ RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
         sh /tmp/pacman-build -S --noconfirm --needed go git && \
         git clone https://github.com/Nomira-OS/nomira-cli /src && \
         git -C /src checkout "$NOMIRA_CLI_REF" && \
-        cd /src && CGO_ENABLED=0 go build -trimpath -o /output/usr/bin/nomira . ; \
+        cd /src && \
+        v="$(git describe --tags --exact-match 2>/dev/null | sed 's/^v//')" && \
+        CGO_ENABLED=0 go build -trimpath ${v:+-ldflags "-X main.version=$v"} -o /output/usr/bin/nomira . ; \
     fi
 
 # --- the image ----------------------------------------------------------------
