@@ -1,4 +1,4 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-c816a36
+# syntax=ghcr.io/nomira-os/nomira:sha-e1146b9
 #
 # The smallest useful system: the base image plus a network service.
 # Language, keymap, time zone, root password and the first user are
@@ -11,7 +11,7 @@ imports:
   - https://raw.githubusercontent.com/Nomira-OS/arch-base/f1142efa8afc33f89ea0cf9341f4f9cce57cc190/recipes/lint.yml
 
 settings:
-  base: ghcr.io/nomira-os/arch-base:sha-f1142ef
+  base: ghcr.io/nomira-os/arch-base:sha-e6e58a9
 
 build:
   packages: {}            # features comes after packages (and before services)

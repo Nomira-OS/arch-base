@@ -1,4 +1,4 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-c816a36
+# syntax=ghcr.io/nomira-os/nomira:sha-e1146b9
 #
 # A system for a real machine: firmware, network, SSH, an editor, all
 # languages, and a unified kernel image. The image carries this recipe in
@@ -15,7 +15,7 @@ imports:
   - https://raw.githubusercontent.com/Nomira-OS/arch-base/f1142efa8afc33f89ea0cf9341f4f9cce57cc190/recipes/uki.yml    # last: the UKI is built from the finished system
 
 settings:
-  base: ghcr.io/nomira-os/arch-base:sha-f1142ef
+  base: ghcr.io/nomira-os/arch-base:sha-e6e58a9
   # Without source_date_epoch the base image's creation time is used.
   # The image name, layer compression, secrets and the like are options
   # of the client: see nomira.conf in the nomira CLI.

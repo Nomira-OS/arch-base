@@ -1,12 +1,46 @@
-# The collector "packages": every package any group names, in one pacman
-# run. Which of them need a new initramfs is not the recipe's business:
-# pacman hooks in the base image rebuild it whenever a package changes what
-# goes into it. The pacman keyring is kept in a BuildKit cache on the build
-# machine, like the keyring of any Arch system; it never enters the image.
+# The collector "packages": every package any group names, installed as a
+# collector that fans out, so that a changed package does not unpack all
+# the others again:
+#
+#   resolve  pacman lists the packages to install, with the dependencies
+#            the system does not have yet: name, URL from the archive
+#            snapshot of the image, sha256 from the signed sync database,
+#            and pkgbase as the key, so that split packages share a bucket.
+#   each     unpacks the packages of one bucket into /nomira/out with
+#            pacman, honouring the image's NoExtract lines and keeping
+#            file capabilities. No database, no install scripts, no hooks:
+#            those come in "then". pacman checks the packages of a bucket
+#            against each other; the frontend checks the buckets.
+#   then     a real pacman transaction over all packages that writes no
+#            file again (NoExtract = *), except the files hooks trigger on:
+#            so the database, the install scripts and the hooks are
+#            pacman's own. libalpm ignores files under NoExtract for path
+#            triggers, hence the negations. Modules and firmware stay
+#            excluded, so they are not written twice; depmod and the
+#            initramfs (/usr/lib/nomira/initramfs, from its cache when
+#            nothing changed) run directly instead.
+#
+# BuildKit downloads the packages and checks them against the sha256 from
+# the signed database, so pacman does not check signatures again.
+# Which packages need a new initramfs is not the recipe's business.
 imports: [mounts.yml]
 build:
   packages:
-    collect: >-
-      run --mount=type=cache,target=/etc/pacman.d/gnupg,id=pacman-keyring,sharing=locked
-      { [ -s /etc/pacman.d/gnupg/trustdb.gpg ] || pacman-key --init; } &&
-      pacman-key --populate && pacman -S --needed --noconfirm ${items}
+    collect:
+      resolve: >-
+        run mkdir -p /tmp/nocache &&
+        pacman -Sp --needed --noconfirm --cachedir /tmp/nocache
+        --print-format '%n %l sha256:%h %e' ${items}
+      each: >-
+        run rm -rf /usr/share/libalpm/hooks /etc/pacman.d/hooks && mkdir -p /tmp/db /tmp/cache &&
+        pacman --root /nomira/out --dbpath /tmp/db --cachedir /tmp/cache --logfile /dev/null
+        -U --noconfirm --nodeps --noscriptlet /nomira/in/*
+      then: >-
+        run neg="$(sed -n 's/^[[:space:]]*Target[[:space:]]*=[[:space:]]*\([^!].*\/.*\)/!\1/p'
+        /usr/share/libalpm/hooks/*.hook /etc/pacman.d/hooks/*.hook 2>/dev/null
+        | grep -v -e '^!usr/lib/modules' -e '^!usr/lib/firmware' | sort -u | tr '\n' ' ')" &&
+        sed "/^\[options\]/a NoExtract = * $neg" /etc/pacman.conf > /tmp/pacman.conf &&
+        echo "NoExtract = * $neg" &&
+        pacman -U --noconfirm --overwrite '*' --config /tmp/pacman.conf /nomira/in/* &&
+        for d in /usr/lib/modules/*/; do if [ -e "${d}vmlinuz" ]; then depmod "$(basename "$d")"; fi; done &&
+        /usr/lib/nomira/initramfs
