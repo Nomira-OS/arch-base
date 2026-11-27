@@ -1,0 +1,32 @@
+name: measure
+
+# Where a packages collector spends its time on the base image: download,
+# verification, unpacking, hooks, initramfs, and what the exporter's tar
+# and zstd cost. Started by hand; the numbers are in the job summary.
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Base image (default the one the example names)
+        required: false
+      example:
+        description: Example whose packages to install
+        default: uki
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Measure
+        env:
+          IMAGE: ${{ inputs.image }}
+          EXAMPLE: ${{ inputs.example }}
+        run: |
+          set -eu
+          img="${IMAGE:-$(sed -n 's/^  base: //p' "examples/$EXAMPLE/recipe.yml")}"
+          sh hack/measure-packages.sh "$img" --example "$EXAMPLE" | tee result.txt
+          { echo '```'; cat result.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
