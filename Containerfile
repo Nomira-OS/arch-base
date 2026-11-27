@@ -104,8 +104,9 @@ ARG SOURCE_DATE_EPOCH
 # /var/cache/pacman/pkg to keep downloads across builds.
 RUN mkdir -p /usr/lib/sysimage/lib && \
     mv -v /var/lib/pacman /usr/lib/sysimage/lib/pacman && \
-    sed -i 's@^#\?DBPath *=.*@DBPath = /usr/lib/sysimage/lib/pacman/@' /etc/pacman.conf && \
-    test "$(pacman-conf DBPath)" = /usr/lib/sysimage/lib/pacman/
+    sed -i 's@^#*[[:space:]]*DBPath[[:space:]]*=.*@DBPath = /usr/lib/sysimage/lib/pacman/@' /etc/pacman.conf && \
+    grep -n 'DBPath' /etc/pacman.conf && pacman-conf DBPath && \
+    pacman-conf DBPath | grep -qx '/usr/lib/sysimage/lib/pacman/\?'
 
 # What bootc needs to boot and install (kernel, initramfs, ostree, skopeo,
 # bubblewrap, filesystem tools, tpm2-tss for disk encryption bound to a
