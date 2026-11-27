@@ -17,9 +17,9 @@
 # SOURCE_DATE_EPOCH and drops the log and the cache, and the image has no
 # pacman keyring; dracut builds a reproducible initramfs from
 # SOURCE_DATE_EPOCH; CI clamps all timestamps to it when it splits the
-# image into layers. Recipes on top get the same from pacman hooks and
-# pacman.conf (install dates, no log) and from the nomira frontend
-# (SOURCE_DATE_EPOCH, timestamps).
+# image into layers. Recipes on top get the same from a pacman hook
+# (install dates) and from the nomira frontend (SOURCE_DATE_EPOCH,
+# timestamps, a tmpfs over logs and caches).
 ARG ARCH_IMAGE
 
 # --- base: Arch synced to the archive snapshot ------------------------------
@@ -95,14 +95,17 @@ ARG SOURCE_DATE_EPOCH
 # the nomira CLI last, because it changes most often. A change rebuilds only
 # its own layer and those after it.
 
-# /var is not part of a bootc image. Keep pacman's database and cache
-# under /usr/lib/sysimage so pacman keeps working in builds on top. The log
-# goes nowhere: in an image it would only be a file that differs with
-# every build (pacman prints the same to the build output).
-RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | \
-        xargs -n1 sh -c '[ -e "$1" ] || exit 0; mkdir -p "/usr/lib/sysimage/$(dirname $(echo $1 | sed "s@/var/@@"))" && mv -v "$1" "/usr/lib/sysimage/$(echo "$1" | sed "s@/var/@@")"' '' && \
-    sed -i -e "/= *\/var/ s/^#//" -e "s@= */var@= /usr/lib/sysimage@g" /etc/pacman.conf && \
-    sed -i 's@^LogFile *=.*@LogFile = /dev/null@' /etc/pacman.conf
+# /var is not part of a bootc image: bootc takes it from an image only at
+# the first install. pacman's database describes the image, so it moves to
+# /usr/lib/sysimage, where pacman keeps working in builds on top. Cache and
+# log stay where Arch has them, in /var/cache and /var/log: machine state.
+# The nomira frontend gives every run of a recipe a tmpfs there, so they
+# never end up in an image; a recipe mounts a BuildKit cache at
+# /var/cache/pacman/pkg to keep downloads across builds.
+RUN mkdir -p /usr/lib/sysimage/lib && \
+    mv -v /var/lib/pacman /usr/lib/sysimage/lib/pacman && \
+    sed -i 's@^#\?DBPath *=.*@DBPath = /usr/lib/sysimage/lib/pacman/@' /etc/pacman.conf && \
+    test "$(pacman-conf DBPath)" = /usr/lib/sysimage/lib/pacman/
 
 # What bootc needs to boot and install (kernel, initramfs, ostree, skopeo,
 # bubblewrap, filesystem tools, tpm2-tss for disk encryption bound to a
@@ -237,8 +240,7 @@ COPY files/nomira-recipe.tmpfiles /usr/lib/tmpfiles.d/nomira-recipe.conf
 
 # bootc filesystem layout: state lives in /var, the rest is the image.
 RUN sed -i 's|^HOME=.*|HOME=/var/home|' /etc/default/useradd && \
-    rm -rf /boot /home /root /usr/local /srv /opt /mnt /var \
-        /usr/lib/sysimage/log /usr/lib/sysimage/cache/pacman/pkg && \
+    rm -rf /boot /home /root /usr/local /srv /opt /mnt /var && \
     mkdir -p /sysroot /boot /var && \
     ln -sT var/roothome /root && \
     ln -sT var/srv /srv && \

@@ -94,7 +94,7 @@ their keyring unable to accept new keys). A step that runs pacman sets
 up a keyring in a tmpfs, which never ends up in the layer:
 
 ```yaml
-collect: run --mount=type=tmpfs,target=/etc/pacman.d/gnupg --mount=type=cache,target=/usr/lib/sysimage/cache/pacman/pkg pacman-key --init && pacman-key --populate && pacman -S --needed --noconfirm ${items}
+collect: run --mount=type=tmpfs,target=/etc/pacman.d/gnupg --mount=type=cache,target=/var/cache/pacman/pkg pacman-key --init && pacman-key --populate && pacman -S --needed --noconfirm ${items}
 ```
 
 ## Unified kernel image
@@ -125,13 +125,20 @@ is `!unprovisioned`, which systemd treats as not set). Then
 
 ## Notes for recipes
 
-- **Initramfs:** the image's initramfs is built from the image itself.
-  After adding or changing the kernel, kernel modules or firmware that is
-  needed early, run dracut again
-  (`dracut --force --kver <kver> /usr/lib/modules/<kver>/initramfs.img`),
-  or let a unified kernel image bring its own.
-- **pacman cache:** it lives in `/usr/lib/sysimage/cache/pacman/pkg`,
-  not below `/var`. A cache mount must point to this path.
+- **Initramfs:** pacman hooks rebuild `/usr/lib/modules/<kver>/initramfs.img`
+  whenever a package changes what goes into it (kernel, firmware, dracut
+  modules), with the triggers of Arch's own dracut hooks. Files copied
+  without a package (`/etc/vconsole.conf`, say) do not trigger them; run
+  `dracut --force --tmpdir /tmp --kver <kver> /usr/lib/modules/<kver>/initramfs.img`
+  after such a copy.
+- **pacman database, cache and log:** the database is part of the image,
+  in `/usr/lib/sysimage/lib/pacman`. Cache and log stay where Arch has
+  them, `/var/cache/pacman/pkg` and `/var/log/pacman.log`; the nomira
+  frontend gives every run a tmpfs over `/var/cache` and `/var/log`, so
+  they never end up in the image. A cache mount at
+  `/var/cache/pacman/pkg` keeps downloads across builds.
+- **Install dates:** a pacman hook sets them to `SOURCE_DATE_EPOCH`, so
+  the package database does not differ between builds.
 - **`/var`, `/opt`, `/usr/local`, `/home`:** they are not part of the
   image. `/opt`, `/usr/local` and `/home` are links into `/var`, which
   is only filled on the running machine. Files for the image belong in
