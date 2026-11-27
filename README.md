@@ -23,10 +23,11 @@ newest of them, see [Packages](https://github.com/orgs/Nomira-OS/packages).
 | Booting with bootc | `linux`, `dracut`, bootc (built from source), `ostree` (a library bootc needs) |
 | `bootc install` | `skopeo`, `bubblewrap`, `btrfs-progs`, `e2fsprogs`, `dosfstools` |
 | Hardening | `apparmor`, active at boot |
-| nomira tools | `podman`, `passt`, `buildkit`, `sudo`, the nomira CLI |
+| Applications | `flatpak`, with Flathub preconfigured; applications live in `/var` and survive image updates |
+| nomira tools | `buildkit`, `sudo`, `systemd-ukify`, `sbsigntools`, the nomira CLI |
 
 Deliberately not included: network management, firmware, SSH, a
-desktop. The recipe chooses those.
+desktop, a container runtime. The recipe chooses those.
 
 buildkitd runs as root and only on demand: `buildkit.socket` is enabled
 and starts the daemon as soon as `sudo nomira build` talks to it.

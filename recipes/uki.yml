@@ -2,7 +2,11 @@
 # initramfs leave the image (they are inside the UKI), and the UKI is
 # built from the system without them, with kernel and initramfs as the
 # packages left them after the phase services. Nothing is rebuilt here.
-imports: [services.yml]
+#
+# The UKI must be built from the finished system, so its phases must be
+# the last ones: import this file last, after services.yml. Its phases are
+# the first of their file and name nothing before them, so they go to the
+# end of what has been merged so far.
 build:
   kernel:
     out: ["run rm /usr/lib/modules/*/vmlinuz /usr/lib/modules/*/initramfs.img"]

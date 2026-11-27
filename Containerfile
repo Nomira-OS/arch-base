@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 #
 # nomira base image: the smallest Arch Linux that bootc can boot, plus the
-# tools to build and switch to nomira images on the machine itself.
+# tools to build nomira images on the machine itself, and Flatpak for
+# applications.
 #
 # The bootc-on-Arch steps follow bootcrew/mono (Apache-2.0), see NOTICE.
 #
@@ -18,8 +19,8 @@
 # pacman keyring; dracut builds a reproducible initramfs from
 # SOURCE_DATE_EPOCH; CI clamps all timestamps to it when it splits the
 # image into layers. Recipes on top get the same from a pacman hook
-# (install dates) and from the nomira frontend (SOURCE_DATE_EPOCH,
-# timestamps, a tmpfs over logs and caches).
+# (install dates), from the nomira frontend (SOURCE_DATE_EPOCH, timestamps)
+# and from their mounts (recipes/mounts.yml: a tmpfs over logs).
 ARG ARCH_IMAGE
 
 # --- base: Arch synced to the archive snapshot ------------------------------
@@ -36,7 +37,7 @@ ARG SOURCE_DATE_EPOCH
 # key, which would then be the same on every machine. The Arch image's
 # keyring goes (its private key is stripped, so it cannot accept new keys
 # anyway). Every pacman step sets up a keyring in a tmpfs instead, see
-# files/pacman-build; recipes do the same.
+# files/pacman-build; recipes keep theirs in a BuildKit cache.
 RUN rm -rf /etc/pacman.d/gnupg
 RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
     --mount=type=bind,source=files/pacman-build,target=/tmp/pacman-build \
@@ -115,17 +116,20 @@ RUN mkdir -p /usr/lib/sysimage/lib && \
 # What bootc needs to boot and install (kernel, initramfs, ostree, skopeo,
 # bubblewrap, filesystem tools, tpm2-tss for disk encryption bound to a
 # TPM, and tpm2-tools, without which dracut refuses its tpm2-tss module),
-# AppArmor, then the nomira toolchain: podman, buildkit, sudo, and
-# ukify and sbsigntools, with which nomira builds (and signs) the unified
-# kernel image of every image. Nothing else: no network manager, no
-# firmware, no ssh, no boot-test VM stack. Recipes add those.
+# AppArmor, Flatpak for applications, which live in /var and survive
+# every image update (Flathub comes preconfigured with Arch's package),
+# then the nomira toolchain: buildkit, sudo, and ukify and sbsigntools,
+# with which a recipe builds (and signs) a unified kernel image. Nothing
+# else: no network manager, no firmware, no ssh, no container runtime.
+# Recipes add those.
 RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
     --mount=type=bind,source=files/pacman-build,target=/tmp/pacman-build \
     sh /tmp/pacman-build -S --noconfirm --needed \
         base linux dracut ostree skopeo bubblewrap \
         btrfs-progs e2fsprogs dosfstools tpm2-tss tpm2-tools \
-        apparmor \
-        podman passt buildkit sudo systemd-ukify sbsigntools
+        apparmor flatpak \
+        buildkit sudo systemd-ukify sbsigntools && \
+    test -e /usr/share/flatpak/remotes.d/flathub.flatpakrepo
 
 # The initramfs follows the packages, as on any Arch system: pacman hooks
 # rebuild it whenever a package changes what goes into it (kernel,

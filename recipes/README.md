@@ -9,11 +9,13 @@ its own way; these are a start.
 | [`mounts.yml`](mounts.yml) | `settings.mounts`: logs and temporary files to a tmpfs, pacman's downloads to a BuildKit cache |
 | [`packages.yml`](packages.yml) | The collector `packages`: one `pacman -S` for everything the groups name, with the keyring in a cache. Imports `mounts.yml` |
 | [`services.yml`](services.yml) | The collector `services`: one `systemctl enable`. Imports `packages.yml` |
-| [`uki.yml`](uki.yml) | The phases `kernel` and `uki`: a unified kernel image, as bootc builds a sealed image. Imports `services.yml` |
-| [`lint.yml`](lint.yml) | The phase `lint`: `bootc container lint` on the finished image. Import it last |
+| [`lint.yml`](lint.yml) | The phase `lint`: `bootc container lint` on the finished system |
+| [`uki.yml`](uki.yml) | The phases `kernel` and `uki`: a unified kernel image, as bootc builds a sealed image. Needs `services.yml`; import it last |
 
 A recipe imports them by a URL pinned to a commit, so that it builds the
-same tomorrow, and adds its own groups:
+same tomorrow, and adds its own groups. The order of the imports is the
+order of the phases: `uki.yml` last, since the unified kernel image has
+to be built from the finished system.
 
 ```yaml
 # syntax=ghcr.io/nomira-os/nomira:sha-…
@@ -23,6 +25,7 @@ imports:
 settings:
   base: ghcr.io/nomira-os/arch-base:sha-…
 build:
+  packages: {}            # features comes right after packages
   features:
     network:
       packages: [networkmanager]
@@ -31,6 +34,8 @@ build:
 
 A part imports the parts it builds on relative to its own URL, so
 `services.yml` brings `packages.yml` and `mounts.yml` from the same
-commit. Anything a part sets, a recipe can change or remove (`key:
+commit. A phase of the recipe itself, such as `features`, goes after
+the phase named before it in the recipe: `packages: {}` in front of it
+places it right after `packages`, and so before `services`. Anything a part sets, a recipe can change or remove (`key:
 null`), see [Imports](https://github.com/Nomira-OS/nomira#imports). The
 [examples](../examples/) use them.
