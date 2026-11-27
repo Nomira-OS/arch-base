@@ -1,9 +1,9 @@
-# syntax=ghcr.io/nomira-os/nomira:sha-051c82c
+# syntax=ghcr.io/nomira-os/nomira:sha-367f87a
 #
 # A system for a real machine: firmware, network, SSH, an editor, all
 # languages, and a unified kernel image. The image carries this recipe in
-# /usr/share/nomira/recipe; on the first boot it becomes the machine's
-# own recipe in /etc/nomira. See README.md for what to adapt.
+# its label org.nomira.recipe; `nomira recipe export` prints it. See
+# README.md for what to adapt.
 settings:
   name: mysystem
   base: ghcr.io/nomira-os/arch-base:sha-e9d5101
@@ -11,20 +11,20 @@ settings:
   # Without source_date_epoch the base image's creation time is used.
   compression: zstd
 
-phases:
+build:
   # All packages of all groups, in one pacman run. Which of them need a
   # new initramfs is not the recipe's business: pacman hooks in the base
   # image rebuild it whenever a package changes what goes into it. The
   # pacman keyring is kept in a BuildKit cache on the build machine, like
   # the keyring of any Arch system; it never enters the image.
-  - name: packages
+  packages:
     collect: >-
       run --mount=type=cache,target=/etc/pacman.d/gnupg,id=pacman-keyring,sharing=locked
       --mount=type=cache,target=/var/cache/pacman/pkg
       { [ -s /etc/pacman.d/gnupg/trustdb.gpg ] || pacman-key --init; } &&
       pacman-key --populate && pacman -S --needed --noconfirm ${items}
 
-  - name: features
+  features:
     groups:
       hardware:
         # linux-firmware would pull in the firmware for every vendor;
@@ -41,26 +41,23 @@ phases:
       language:
         packages: [glibc-locales]
 
-  - name: services
+  services:
     collect: run systemctl enable ${items}
 
   # The unified kernel image, as bootc builds a sealed image: kernel and
   # initramfs leave the image (they are inside the UKI), and the UKI is
   # built from the system without them, with kernel and initramfs as the
   # packages left them after the phase services. Nothing is rebuilt here.
-  # The recipe record comes right before this phase, so the UKI's digest
-  # covers it.
-  - name: kernel
+  kernel:
     groups:
       out: ["run rm /usr/lib/modules/*/vmlinuz /usr/lib/modules/*/initramfs.img"]
 
-  - name: uki
+  uki:
     groups:
       uki:
         - >-
           run --mount=type=bind,from=kernel,target=/target
           --mount=type=bind,from=services,source=/usr/lib/modules,target=/kernels
-          --mount=type=tmpfs,target=/tmp
           mkdir -p /boot/EFI/Linux &&
           for d in /kernels/*; do
           bootc container ukify --rootfs /target --kernel-dir "$d" --erofs-version v1-only --

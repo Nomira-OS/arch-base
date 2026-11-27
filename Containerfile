@@ -233,12 +233,6 @@ RUN --mount=type=tmpfs,target=/tmp --mount=type=tmpfs,target=/root \
         lsinitrd "$img" | grep -q "$f" || { echo "initramfs lacks $f" >&2; exit 1; }; \
     done
 
-# Every image built with nomira carries its recipe read-only in
-# /usr/share/nomira/recipe. On the first boot it becomes the machine's
-# editable recipe in /etc/nomira, which `nomira build` uses by default;
-# an existing /etc/nomira is left alone.
-COPY files/nomira-recipe.tmpfiles /usr/lib/tmpfiles.d/nomira-recipe.conf
-
 # bootc filesystem layout: state lives in /var, the rest is the image.
 RUN sed -i 's|^HOME=.*|HOME=/var/home|' /etc/default/useradd && \
     rm -rf /boot /home /root /usr/local /srv /opt /mnt /var && \

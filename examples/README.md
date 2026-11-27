@@ -8,10 +8,13 @@ starting point. CI checks every one with `nomira lint`.
 | [`minimal`](minimal/recipe.yml) | The base image plus NetworkManager: enough to boot and get online. The [quick start](https://nomira-os.github.io/nomira-web/docs/getting-started/quickstart/) uses it. |
 | [`uki`](uki/recipe.yml) | A system for a real machine: firmware, network, SSH, an editor, all languages, and a unified kernel image. The [installation guide](https://nomira-os.github.io/nomira-web/docs/getting-started/installation/) uses it. |
 
-Every image carries its recipe, read-only, in `/usr/share/nomira/recipe`:
-the recipe files and everything the recipe copies from its directory.
-On the first boot the base image copies it to `/etc/nomira`, where
-`nomira build` finds it. Nothing in the recipe has to do that.
+Every image carries the recipe it was built from, with all imports
+merged, in its label `org.nomira.recipe`. On the installed machine
+`sudo nomira recipe export -o /etc/nomira/recipe.yml` makes it the
+machine's own recipe, which `nomira build` uses by default, and
+`nomira recipe diff` shows what a changed recipe would change. Files the
+recipe copies are in the image where they were copied to; keep them in
+version control next to the recipe.
 
 ## Adapting `uki`
 
@@ -24,7 +27,7 @@ On the first boot the base image copies it to `/etc/nomira`, where
   one of them changes; the downloads come from the cache, but unpacking,
   the hooks and, with firmware among them, a new initramfs take time.
   If that matters, move what rarely changes (firmware, microcode) to a
-  second collector before `packages`, with the same command; see
+  second collector phase before `packages`, with the same command; see
   [Large collectors](https://nomira-os.github.io/nomira-web/docs/recipes/rebuilds/#large-collectors).
   The result is the same either way.
 - **`network`**: NetworkManager is an example; any option from
