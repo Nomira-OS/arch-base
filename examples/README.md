@@ -40,8 +40,8 @@ version control next to the recipe.
   makes every answer work. To set them in the image instead, copy
   `/etc/locale.conf` and `/etc/vconsole.conf` in a group of `features`.
   The initramfs is only rebuilt by package changes, so for the keymap to
-  reach it as well, rebuild it after the copy:
-  `run for d in /usr/lib/modules/*/; do dracut --force --tmpdir /tmp --kver "$(basename "$d")" "${d}initramfs.img"; done`.
+  reach it as well, import `recipes/initramfs.yml` after `services.yml`
+  and before `lint.yml`.
 - **Files**: `copy files/… /etc/…` in any group. The record picks up
   every file the recipe copies.
 
