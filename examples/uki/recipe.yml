@@ -6,7 +6,7 @@
 # README.md for what to adapt.
 settings:
   name: mysystem
-  base: ghcr.io/nomira-os/arch-base:sha-e9d5101
+  base: ghcr.io/nomira-os/arch-base:sha-492224c
   # Everything that shapes the image is here, nothing comes from flags.
   # Without source_date_epoch the base image's creation time is used.
   compression: zstd
