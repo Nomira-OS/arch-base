@@ -9,10 +9,9 @@
 #
 # - Keyring: set up in the tmpfs for this one step, so no private key ends
 #   up in a layer. The image ships no keyring; recipes do the same.
-# - Slow downloads: the Arch Linux Archive sometimes stalls for longer than
-#   pacman's default timeout, so the timeout is off. A failed call is tried
-#   again after 30 s and after 90 s; packages already downloaded stay in
-#   the cache.
+# - Slow downloads: the Arch Linux Archive sometimes stalls; pacman.conf
+#   turns the download timeout off. A failed call is tried again after
+#   30 s and after 90 s; packages already downloaded stay in the cache.
 # - Reproducibility: the install date of every package becomes
 #   SOURCE_DATE_EPOCH, and the pacman log and the package cache are removed.
 set -eu
@@ -47,5 +46,6 @@ for desc in "${db%/}"/local/*/desc; do
     cat "$desc.new" > "$desc"
     rm "$desc.new"
 done
-rm -f "$(pacman-conf LogFile)"
+log="$(pacman-conf LogFile)"
+[ ! -f "$log" ] || rm -f "$log"
 rm -rf "$(pacman-conf CacheDir)"*

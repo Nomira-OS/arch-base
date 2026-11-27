@@ -15,8 +15,11 @@
 #
 # Reproducibility: files/pacman-build sets the install dates to
 # SOURCE_DATE_EPOCH and drops the log and the cache, and the image has no
-# pacman keyring; dracut builds a reproducible initramfs from SOURCE_DATE_EPOCH; CI
-# clamps all timestamps to it when it splits the image into layers.
+# pacman keyring; dracut builds a reproducible initramfs from
+# SOURCE_DATE_EPOCH; CI clamps all timestamps to it when it splits the
+# image into layers. Recipes on top get the same from pacman hooks and
+# pacman.conf (install dates, no log) and from the nomira frontend
+# (SOURCE_DATE_EPOCH, timestamps).
 ARG ARCH_IMAGE
 
 # --- base: Arch synced to the archive snapshot ------------------------------
@@ -25,7 +28,9 @@ ARG SNAPSHOT
 ARG SOURCE_DATE_EPOCH
 # The mirrorlist stays in the final image, so recipes built on top install
 # from the same package state. -Syyuu also downgrades, so the result does not
-# depend on how new ARCH_IMAGE is.
+# depend on how new ARCH_IMAGE is. The Arch Linux Archive sometimes stalls
+# for longer than pacman's download timeout; the timeout is off, here and
+# in every recipe built on top.
 #
 # No pacman keyring stays in the image: a keyring holds a private signing
 # key, which would then be the same on every machine. The Arch image's
@@ -39,7 +44,9 @@ RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
     printf 'Server = https://archive.archlinux.org/repos/%s/$repo/os/$arch\n' "$SNAPSHOT" \
         > /etc/pacman.d/mirrorlist && \
     sed -i -e '/DownloadUser/d' \
-        -e 's/^#\?ParallelDownloads.*/ParallelDownloads = 2/' /etc/pacman.conf && \
+        -e 's/^#\?ParallelDownloads.*/ParallelDownloads = 2/' \
+        -e '/^#\?DisableDownloadTimeout/d' \
+        -e '/^\[options\]/a DisableDownloadTimeout' /etc/pacman.conf && \
     sh /tmp/pacman-build -Syyuu --noconfirm
 
 # --- bootc, built from source -----------------------------------------------
@@ -88,11 +95,14 @@ ARG SOURCE_DATE_EPOCH
 # the nomira CLI last, because it changes most often. A change rebuilds only
 # its own layer and those after it.
 
-# /var is not part of a bootc image. Keep pacman's database, cache and log
-# under /usr/lib/sysimage so pacman keeps working in builds on top.
+# /var is not part of a bootc image. Keep pacman's database and cache
+# under /usr/lib/sysimage so pacman keeps working in builds on top. The log
+# goes nowhere: in an image it would only be a file that differs with
+# every build (pacman prints the same to the build output).
 RUN grep "= */var" /etc/pacman.conf | sed "/= *\/var/s/.*=// ; s/ //" | \
         xargs -n1 sh -c '[ -e "$1" ] || exit 0; mkdir -p "/usr/lib/sysimage/$(dirname $(echo $1 | sed "s@/var/@@"))" && mv -v "$1" "/usr/lib/sysimage/$(echo "$1" | sed "s@/var/@@")"' '' && \
-    sed -i -e "/= *\/var/ s/^#//" -e "s@= */var@= /usr/lib/sysimage@g" /etc/pacman.conf
+    sed -i -e "/= *\/var/ s/^#//" -e "s@= */var@= /usr/lib/sysimage@g" /etc/pacman.conf && \
+    sed -i 's@^LogFile *=.*@LogFile = /dev/null@' /etc/pacman.conf
 
 # What bootc needs to boot and install (kernel, initramfs, ostree, skopeo,
 # bubblewrap, filesystem tools, tpm2-tss for disk encryption bound to a
@@ -109,16 +119,31 @@ RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
         apparmor \
         podman passt buildkit sudo systemd-ukify sbsigntools
 
-# Arch's dracut package regenerates an initramfs into /boot on every
-# transaction that touches kernels or firmware. In an image that is wasted
-# time and bytes in a layer: the base image builds its own initramfs below,
-# recipes build theirs when and where they need it. Mask those hooks.
-RUN mkdir -p /etc/pacman.d/hooks && \
-    for h in /usr/share/libalpm/hooks/*.hook; do \
-        if grep -qi '^ *Exec *=.*dracut' "$h"; then \
-            ln -sf /dev/null "/etc/pacman.d/hooks/$(basename "$h")" && echo "masked $h"; \
-        fi; \
-    done
+# The initramfs follows the packages, as on any Arch system: pacman hooks
+# rebuild it whenever a package changes what goes into it (kernel,
+# firmware, dracut modules, …). Arch's own dracut hooks write a
+# host-specific initramfs to /boot, which bootc does not boot. They are
+# masked, and one hook with the same triggers rebuilds
+# /usr/lib/modules/<kver>/initramfs.img instead (files/pacman-hooks). A
+# recipe therefore never decides which packages need a new initramfs.
+# The base image builds its own below, after bootc.
+#
+# A second hook sets the install dates in pacman's database to
+# SOURCE_DATE_EPOCH, so that recipe layers do not depend on the build
+# time.
+COPY files/pacman-hooks/zz-nomira-installdate.hook /usr/share/libalpm/hooks/
+RUN --mount=type=bind,source=files/pacman-hooks/initramfs.action,target=/tmp/initramfs.action \
+    hooks="$(grep -lis '^ *Exec *=.*dracut' /usr/share/libalpm/hooks/*.hook)" && \
+    [ -n "$hooks" ] || { echo "no dracut hooks found in /usr/share/libalpm/hooks" >&2; exit 1; }; \
+    mkdir -p /etc/pacman.d/hooks && \
+    for h in $hooks; do \
+        ln -sf /dev/null "/etc/pacman.d/hooks/$(basename "$h")" && echo "masked $h" >&2; \
+        echo "# from $(basename "$h")"; \
+        awk '/^\[/ { t = ($0 == "[Trigger]") } t' "$h"; \
+        echo; \
+    done > /usr/share/libalpm/hooks/90-nomira-initramfs.hook && \
+    cat /tmp/initramfs.action >> /usr/share/libalpm/hooks/90-nomira-initramfs.hook && \
+    cat /usr/share/libalpm/hooks/90-nomira-initramfs.hook
 
 # bootc container ukify looks for ukify in PATH. Fail here rather than in a
 # recipe if it, sbsign or dracut is missing; if Arch only ships ukify below
@@ -203,6 +228,12 @@ RUN --mount=type=tmpfs,target=/tmp --mount=type=tmpfs,target=/root \
     for f in systemd-gpt-auto-generator systemd-cryptsetup libtss2-esys; do \
         lsinitrd "$img" | grep -q "$f" || { echo "initramfs lacks $f" >&2; exit 1; }; \
     done
+
+# Every image built with nomira carries its recipe read-only in
+# /usr/share/nomira/recipe. On the first boot it becomes the machine's
+# editable recipe in /etc/nomira, which `nomira build` uses by default;
+# an existing /etc/nomira is left alone.
+COPY files/nomira-recipe.tmpfiles /usr/lib/tmpfiles.d/nomira-recipe.conf
 
 # bootc filesystem layout: state lives in /var, the rest is the image.
 RUN sed -i 's|^HOME=.*|HOME=/var/home|' /etc/default/useradd && \

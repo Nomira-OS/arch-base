@@ -1,0 +1,10 @@
+
+# The triggers above are those of Arch's dracut hooks, which nomira masks:
+# they write a host-specific initramfs to /boot. This action keeps the one
+# bootc boots instead, /usr/lib/modules/<kver>/initramfs.img, built with
+# the configuration in /usr/lib/dracut/dracut.conf.d (not host-specific,
+# reproducible with SOURCE_DATE_EPOCH), and removes it with its kernel.
+[Action]
+Description = Updating the initramfs in /usr/lib/modules (nomira)...
+When = PostTransaction
+Exec = /usr/bin/sh -c 'for d in /usr/lib/modules/*/; do if [ -e "${d}vmlinuz" ]; then dracut --force --tmpdir /tmp --kver "$(basename "$d")" "${d}initramfs.img" || exit 1; else rm -f "${d}initramfs.img"; fi; done'

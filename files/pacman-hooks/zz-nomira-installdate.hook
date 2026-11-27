@@ -1,0 +1,13 @@
+# pacman records when it installed a package. In an image that time would
+# make every build differ; with SOURCE_DATE_EPOCH set (the nomira frontend
+# sets it for every step) it becomes that time instead.
+[Trigger]
+Type = Package
+Operation = Install
+Operation = Upgrade
+Target = *
+
+[Action]
+Description = Setting install dates to SOURCE_DATE_EPOCH (nomira)...
+When = PostTransaction
+Exec = /usr/bin/sh -c '[ -n "$SOURCE_DATE_EPOCH" ] || exit 0; db="$(pacman-conf DBPath)"; sed -i "/^%INSTALLDATE%/{n;s/.*/$SOURCE_DATE_EPOCH/}" "${db%/}"/local/*/desc'
