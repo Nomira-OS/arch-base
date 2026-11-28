@@ -2,8 +2,13 @@
 # collector that fans out, so that a changed package does not unpack all
 # the others again:
 #
-#   resolve  pacman lists the packages to install, with the dependencies
-#            the system does not have yet: name, URL from the archive
+# This flavour installs from the archive snapshot of the image, the same
+# package set on every build; packages-live.yml from the live repositories.
+#
+#   resolve  pacman lists what pacman -Su --needed would download: the
+#            packages the groups name, the dependencies the system does
+#            not have yet, and updates of installed packages if the sync
+#            database is newer than they are. Name, URL from the archive
 #            snapshot of the image, sha256 from the signed sync database,
 #            and pkgbase as the key, so that split packages share a bucket.
 #            The empty cache directory makes pacman print URLs, never a
@@ -33,11 +38,13 @@
 #            they are. The first NoExtract line is ours, so NoExtract
 #            lines of the system still win. --overwrite '*' only lets
 #            pacman take the files the buckets put in place; each and the
-#            frontend checked them. Packages the system has in another
-#            version are upgraded first in a transaction of their own,
-#            without NoExtract: an upgrade removes the old files and would
-#            not unpack them again. New packages that no item named are
-#            then marked as dependencies, as pacman -S would.
+#            frontend checked them. An update is laid over its old files
+#            in its bucket like a new package; NoUpgrade = * keeps pacman
+#            from removing the old files it would then not unpack again,
+#            and the files only the old version had are removed
+#            afterwards. Install scripts and hooks see a real upgrade. New
+#            packages that no item named are then marked as dependencies,
+#            as pacman -S would.
 #
 # BuildKit downloads the packages and checks them against the sha256 from
 # the signed database, so pacman does not check signatures again. They are
@@ -50,15 +57,16 @@ build:
     collect:
       resolve: >-
         run mkdir -p /tmp/nocache &&
-        pacman -Sp --needed --noconfirm --cachedir /tmp/nocache
+        pacman -Sup --needed --noconfirm --cachedir /tmp/nocache
         --print-format '%n %l sha256:%h %e' ${items}
       each: >-
         run --mount=type=tmpfs,target=/etc/pacman.d/hooks
+        for f in /nomira/in/*.pkg.tar.*; do if [ ! -e "$f" ]; then exit 0; fi; break; done &&
         { cat /etc/pacman.conf && printf '[options]\nNoExtract = usr/share/libalpm/hooks/*\n'; } > /tmp/pacman.conf &&
         mkdir -p /tmp/db &&
         pacman --config /tmp/pacman.conf --root /nomira/out --dbpath /tmp/db --logfile /dev/null
-        -U --noconfirm --nodeps --noscriptlet /nomira/in/* &&
-        for f in /nomira/in/*; do p="${f##*/}"; p="${p%.pkg.tar*}"; p="${p%-*}";
+        -U --noconfirm --nodeps --noscriptlet /nomira/in/*.pkg.tar.* &&
+        for f in /nomira/in/*.pkg.tar.*; do p="${f##*/}"; p="${p%.pkg.tar*}"; p="${p%-*}";
         if grep -q '^usr/share/libalpm/hooks/.' "/tmp/db/local/$p/files"; then
         bsdtar -xpf "$f" -C /nomira/out usr/share/libalpm/hooks; fi; done &&
         cd /nomira/out && find . ! -type d | sed 's|^\./||' | while IFS= read -r f; do
@@ -68,7 +76,9 @@ build:
         xargs -d '\n' pacman -Qo < /tmp/present 2>&1 | awk -v names="$names"
         '/ is owned by / && index(names, " " $(NF-1) " ") { next } { print "conflict: " $0; bad = 1 } END { exit bad }'; fi
       then: >-
-        run pacman -Qq | sort > /tmp/before && hooks="" &&
+        run pacman -Qq | sort > /tmp/before &&
+        for f in /nomira/in/*.db; do if [ -f "$f" ]; then cp "$f" "$(pacman-conf DBPath)/sync/"; fi; done &&
+        hooks="" &&
         for f in /etc/pacman.d/hooks/*.hook; do if [ -f "$f" ]; then hooks="$hooks $f"; fi; done &&
         for f in /usr/share/libalpm/hooks/*.hook; do
         if [ -f "$f" ] && [ ! -e "/etc/pacman.d/hooks/${f##*/}" ]; then hooks="$hooks $f"; fi; done &&
@@ -84,13 +94,16 @@ build:
         /^[[:space:]]*Target[[:space:]]*=/ { x = $0; sub(/^[^=]*=[[:space:]]*/, "", x);
         sub(/[[:space:]]+$/, "", x); if (x !~ /^!/) s[++m] = x }
         END { hook() }' $hooks </dev/null)" &&
-        awk -v l="NoExtract = * $neg" '{ print } !d && /^\[options\]/ { print l; d = 1 }'
+        awk -v l="NoExtract = * $neg" -v u="NoUpgrade = * $neg" '{ print } !d && /^\[options\]/ { print l; print u; d = 1 }'
         /etc/pacman.conf > /tmp/pacman.conf &&
         echo "NoExtract = * $neg" &&
-        printf '%s\n' /nomira/in/* | awk -F/ 'NR == FNR { had[$0]; next } { n = $NF; sub(/\.pkg\.tar.*/, "", n);
-        for (i = 0; i < 3; i++) sub(/-[^-]*$/, "", n); print > (n in had ? "/tmp/up" : "/tmp/new") }' /tmp/before - &&
-        if [ -s /tmp/up ]; then xargs -d '\n' pacman -U --noconfirm --nodeps --nodeps --overwrite '*' < /tmp/up; fi &&
-        if [ -s /tmp/new ]; then xargs -d '\n' pacman -U --noconfirm --overwrite '*' --config /tmp/pacman.conf < /tmp/new; fi &&
+        printf '%s\n' /nomira/in/*.pkg.tar.* > /tmp/pkgs &&
+        awk -F/ 'NR == FNR { had[$0]; next } { n = $NF; sub(/\.pkg\.tar.*/, "", n);
+        for (i = 0; i < 3; i++) sub(/-[^-]*$/, "", n); if (n in had) print n }' /tmp/before /tmp/pkgs > /tmp/up &&
+        if [ -s /tmp/up ]; then xargs pacman -Qlq < /tmp/up | sort -u > /tmp/old; fi &&
+        xargs -d '\n' pacman -U --noconfirm --overwrite '*' --config /tmp/pacman.conf < /tmp/pkgs &&
+        if [ -s /tmp/up ]; then xargs pacman -Qlq < /tmp/up | sort -u | comm -23 /tmp/old - | grep -v '/$' |
+        while IFS= read -r f; do rm -f "$f"; done; fi &&
         pacman -Sp --nodeps --nodeps --print-format '%n' ${items} | sort -u > /tmp/asked &&
         deps="$(pacman -Qq | sort | comm -23 - /tmp/before | comm -23 - /tmp/asked)" &&
         if [ -n "$deps" ]; then pacman -D --asdeps $deps; fi

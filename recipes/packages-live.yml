@@ -1,0 +1,39 @@
+# The collector "packages" against the live repositories instead of the
+# archive snapshot of the image: packages.yml with another resolve.
+#
+#   resolve  runs on every build (--no-cache) and fetches the current
+#            sync databases from a mirror into a copy of the database,
+#            then lists what pacman -Su --needed would download: the
+#            packages the groups name, their dependencies, and every
+#            update of the system, all from one state of the repositories,
+#            as Arch requires (no partial upgrades). The sync databases
+#            themselves are listed too, so that then puts exactly the
+#            state that was resolved into the image. When the
+#            repositories did not change, the list does not, and every
+#            later step comes from the cache.
+#
+# Updated packages are laid over their old files in their bucket like new
+# ones; then upgrades them in the same transaction, without writing them
+# again. The result depends on the day of the build: the same recipe
+# gives the same image only for the same state of the repositories, which
+# the sync databases in the image record.
+#
+# Trust: the packages are checked against the sha256 in the sync
+# databases, which come from the mirror over HTTPS; Arch does not sign
+# its databases, and pacman -U does not check the signatures of the
+# packages. Use a mirror you trust.
+imports: [packages.yml]
+build:
+  packages:
+    collect:
+      resolve: >-
+        run --no-cache mirror='https://geo.mirror.pkgbuild.com/$repo/os/$arch' &&
+        mkdir -p /tmp/nocache /tmp/db && cp -a "$(pacman-conf DBPath)/local" /tmp/db/ &&
+        printf 'Server = %s\n' "$mirror" > /tmp/mirrorlist &&
+        sed 's|^Include *= */etc/pacman.d/mirrorlist|Include = /tmp/mirrorlist|' /etc/pacman.conf > /tmp/pacman.conf &&
+        pacman --config /tmp/pacman.conf --dbpath /tmp/db -Sy >&2 &&
+        pacman --config /tmp/pacman.conf --dbpath /tmp/db -Sup --needed --noconfirm --cachedir /tmp/nocache
+        --print-format '%n %l sha256:%h %e' ${items} &&
+        arch="$(uname -m)" && for r in $(pacman-conf --config /tmp/pacman.conf --repo-list); do
+        url="$(printf '%s' "$mirror" | sed "s|\$repo|$r|; s|\$arch|$arch|")/$r.db" &&
+        printf '%s.db %s sha256:%s sync-databases\n' "$r" "$url" "$(sha256sum "/tmp/db/sync/$r.db" | cut -d' ' -f1)"; done

@@ -8,6 +8,7 @@ its own way; these are a start.
 |---|---|
 | [`mounts.yml`](mounts.yml) | `settings.mounts`: logs and temporary files to a tmpfs, pacman's downloads and the initramfs cache to BuildKit caches |
 | [`packages.yml`](packages.yml) | The collector `packages`, fanning out: resolved by pacman, downloaded by BuildKit, unpacked in up to 64 layers that only change with their own packages (no hooks run there), finished by one pacman transaction for database, install scripts and hooks that writes the files again only where a hook needs one. Imports `mounts.yml` |
+| [`packages-live.yml`](packages-live.yml) | `packages.yml` against the live repositories instead of the archive snapshot of the image: new packages and every update from one current state of the repositories, resolved on every build. The image records that state in its sync databases |
 | [`services.yml`](services.yml) | The collector `services`: one `systemctl enable`. Imports `packages.yml` |
 | [`initramfs.yml`](initramfs.yml) | The phase `initramfs`: the initramfs once more, for configuration copied after the packages (keymap, dracut options); near free when nothing changed. Import it after `services.yml` |
 | [`lint.yml`](lint.yml) | The phase `lint`: `bootc container lint` on the finished system |

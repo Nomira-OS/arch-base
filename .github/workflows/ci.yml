@@ -56,7 +56,7 @@ jobs:
           mkdir -p .lint-parts
           cp -r recipes .lint-parts/
           {
-            echo "imports: [recipes/services.yml, recipes/initramfs.yml, recipes/lint.yml, recipes/uki.yml]"
+            echo "imports: [recipes/services.yml, recipes/packages-live.yml, recipes/initramfs.yml, recipes/lint.yml, recipes/uki.yml]"
             echo "settings: {base: $(sed -n 's/^  base: //p' examples/minimal/recipe.yml)}"
             echo "build: {packages: {}, features: {g: {packages: [nano]}}}"
           } > .lint-parts/recipe.yml
