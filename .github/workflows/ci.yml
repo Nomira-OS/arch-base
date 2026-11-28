@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   checks:
-    uses: Nomira-OS/ci/.github/workflows/checks.yml@main
+    uses: Nomira-OS/ci/.github/workflows/checks.yml@6f634847008ee3b3d30fcb84095b79b9a3bb1da7 # main
 
   # The example recipes must stay valid for the frontend they name, and
   # the recipe parts in recipes/ for the frontend of the examples. Linting
@@ -97,7 +97,7 @@ jobs:
       attestations: write
       security-events: write
       actions: read
-    uses: Nomira-OS/ci/.github/workflows/image.yml@main
+    uses: Nomira-OS/ci/.github/workflows/image.yml@6f634847008ee3b3d30fcb84095b79b9a3bb1da7 # main
     with:
       image: ghcr.io/nomira-os/arch-base
       build-args: ${{ needs.versions.outputs.build-args }}

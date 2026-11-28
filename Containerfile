@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:572cebbc2b15e6f84c077742952674889cb63cd5e9b80abdffcbe587b6f19183
 #
 # nomira base image: the smallest Arch Linux that bootc can boot, plus the
 # tools to build nomira images on the machine itself, and Flatpak for
