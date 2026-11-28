@@ -6,23 +6,35 @@
 #            the system does not have yet: name, URL from the archive
 #            snapshot of the image, sha256 from the signed sync database,
 #            and pkgbase as the key, so that split packages share a bucket.
+#            The empty cache directory makes pacman print URLs, never a
+#            path in a cache. Packages the system cannot take, such as one
+#            that conflicts with an installed package, stop the build
+#            here (--noconfirm answers no).
 #   each     unpacks the packages of one bucket into /nomira/out with
-#            pacman, honouring the image's NoExtract lines and keeping
-#            file capabilities. No database, no install scripts, no hooks:
-#            those come in "then". pacman checks the packages of a bucket
-#            against each other; the frontend checks the buckets.
+#            pacman, honouring NoExtract and keeping file capabilities. No
+#            database, no install scripts and no hooks: they would run in
+#            a system that holds only this bucket. The hook files of the
+#            packages are therefore unpacked after pacman, with bsdtar,
+#            and the hook directory of the system is hidden by a tmpfs.
+#            pacman checks the packages of a bucket against each other;
+#            the frontend checks the buckets.
 #   then     a real pacman transaction over all packages that writes no
-#            file again (NoExtract = *), except the files hooks trigger on:
-#            so the database, the install scripts and the hooks are
-#            pacman's own. libalpm ignores files under NoExtract for path
-#            triggers, hence the negations. Modules and firmware stay
-#            excluded, so they are not written twice; depmod and the
-#            initramfs (/usr/lib/nomira/initramfs, from its cache when
-#            nothing changed) run directly instead.
+#            file again (NoExtract = *), except where hooks need one:
+#            database, install scripts and hooks are pacman's own. libalpm
+#            ignores files under NoExtract for path triggers, hence a
+#            negation per target of the hooks in effect. A hook without
+#            NeedsTargets needs one matching path, so a target like
+#            usr/share/fonts/* gets the directory usr/share/fonts/, which
+#            every font package lists: no font, firmware file or module is
+#            written twice. A hook with NeedsTargets gets its targets as
+#            they are. The first NoExtract line is ours, so NoExtract
+#            lines of the system still win.
 #
 # BuildKit downloads the packages and checks them against the sha256 from
-# the signed database, so pacman does not check signatures again.
-# Which packages need a new initramfs is not the recipe's business.
+# the signed database, so pacman does not check signatures again. They are
+# cached by their sha256 below /var/lib/buildkit, across reboots and base
+# images. Which packages need a new initramfs is not the recipe's
+# business: the hook of the image decides, as on any Arch system.
 imports: [mounts.yml]
 build:
   packages:
@@ -32,15 +44,32 @@ build:
         pacman -Sp --needed --noconfirm --cachedir /tmp/nocache
         --print-format '%n %l sha256:%h %e' ${items}
       each: >-
-        run rm -rf /usr/share/libalpm/hooks /etc/pacman.d/hooks && mkdir -p /tmp/db /tmp/cache &&
-        pacman --root /nomira/out --dbpath /tmp/db --cachedir /tmp/cache --logfile /dev/null
-        -U --noconfirm --nodeps --noscriptlet /nomira/in/*
+        run --mount=type=tmpfs,target=/etc/pacman.d/hooks
+        { cat /etc/pacman.conf && printf '[options]\nNoExtract = usr/share/libalpm/hooks/*\n'; } > /tmp/pacman.conf &&
+        mkdir -p /tmp/db &&
+        pacman --config /tmp/pacman.conf --root /nomira/out --dbpath /tmp/db --logfile /dev/null
+        -U --noconfirm --nodeps --noscriptlet /nomira/in/* &&
+        for f in /nomira/in/*; do p="${f##*/}"; p="${p%.pkg.tar*}"; p="${p%-*}";
+        if grep -q '^usr/share/libalpm/hooks/.' "/tmp/db/local/$p/files"; then
+        bsdtar -xpf "$f" -C /nomira/out usr/share/libalpm/hooks; fi; done
       then: >-
-        run neg="$(sed -n 's/^[[:space:]]*Target[[:space:]]*=[[:space:]]*\([^!].*\/.*\)/!\1/p'
-        /usr/share/libalpm/hooks/*.hook /etc/pacman.d/hooks/*.hook 2>/dev/null
-        | grep -v -e '^!usr/lib/modules' -e '^!usr/lib/firmware' | sort -u | tr '\n' ' ')" &&
-        sed "/^\[options\]/a NoExtract = * $neg" /etc/pacman.conf > /tmp/pacman.conf &&
+        run hooks="" &&
+        for f in /etc/pacman.d/hooks/*.hook; do if [ -f "$f" ]; then hooks="$hooks $f"; fi; done &&
+        for f in /usr/share/libalpm/hooks/*.hook; do
+        if [ ! -e "/etc/pacman.d/hooks/${f##*/}" ]; then hooks="$hooks $f"; fi; done &&
+        neg="$(awk '
+        function section(  i) { if (path) for (i = 1; i <= m; i++) t[++n] = s[i]; m = 0; path = 0 }
+        function hook(  i, x) { section(); for (i = 1; i <= n; i++) { x = t[i];
+        if (!needs && x ~ /\/\*$/) x = substr(x, 1, length(x) - 1);
+        if (!(x in seen)) { seen[x]; printf "!%s ", x } } n = 0; needs = 0 }
+        FNR == 1 && NR > 1 { hook() }
+        /^[[:space:]]*\[/ { section() }
+        /^[[:space:]]*Type[[:space:]]*=[[:space:]]*(Path|File)[[:space:]]*$/ { path = 1 }
+        /^[[:space:]]*NeedsTargets/ { needs = 1 }
+        /^[[:space:]]*Target[[:space:]]*=/ { x = $0; sub(/^[^=]*=[[:space:]]*/, "", x);
+        sub(/[[:space:]]+$/, "", x); if (x !~ /^!/) s[++m] = x }
+        END { hook() }' $hooks </dev/null)" &&
+        awk -v l="NoExtract = * $neg" '{ print } !d && /^\[options\]/ { print l; d = 1 }'
+        /etc/pacman.conf > /tmp/pacman.conf &&
         echo "NoExtract = * $neg" &&
-        pacman -U --noconfirm --overwrite '*' --config /tmp/pacman.conf /nomira/in/* &&
-        for d in /usr/lib/modules/*/; do if [ -e "${d}vmlinuz" ]; then depmod "$(basename "$d")"; fi; done &&
-        /usr/lib/nomira/initramfs
+        pacman -U --noconfirm --overwrite '*' --config /tmp/pacman.conf /nomira/in/*

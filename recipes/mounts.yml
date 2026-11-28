@@ -1,9 +1,10 @@
 # What no run of a recipe should leave in the image: logs and temporary
-# files go to a tmpfs, pacman's downloads and the initramfs cache of
-# /usr/lib/nomira/initramfs to BuildKit caches on the build machine, kept
-# across builds. On a bootc system /tmp and /run are tmpfs
-# at runtime, and bootc takes /var from an image only at the first
-# install.
+# files go to a tmpfs, the downloads of a pacman -S in a recipe and the
+# initramfs cache of /usr/lib/nomira/initramfs to BuildKit caches on the
+# build machine, kept across builds and reboots. packages.yml needs no
+# pacman cache: BuildKit downloads its packages and keeps them, by their
+# sha256. On a bootc system /tmp and /run are tmpfs at runtime, and bootc
+# takes /var from an image only at the first install.
 settings:
   mounts:
     /var/cache/pacman/pkg: type=cache,id=pacman-pkg,sharing=locked
