@@ -94,15 +94,26 @@ and compares the layers.
 
 ## pacman in builds on top
 
+Recipes install packages with the part
+[`recipes/packages.yml`](recipes/packages.yml): pacman resolves them,
+BuildKit downloads them and checks them against the sha256 of the signed
+sync database, and pacman unpacks them, in up to 64 layers that only
+change with their own packages. No keyring is needed for that.
+
 The image ships no pacman keyring. A keyring contains a private signing
 key, and one baked into an image is the same key on every machine that
 uses it (the Arch images strip it for that reason, which also leaves
-their keyring unable to accept new keys). A step that runs pacman sets
-up a keyring in a tmpfs, which never ends up in the layer:
+their keyring unable to accept new keys). A step that runs `pacman -S`
+itself sets up a keyring in a tmpfs, which never ends up in the layer:
 
 ```yaml
-collect: run --mount=type=tmpfs,target=/etc/pacman.d/gnupg --mount=type=cache,target=/var/cache/pacman/pkg pacman-key --init && pacman-key --populate && pacman -S --needed --noconfirm ${items}
+run --mount=type=tmpfs,target=/etc/pacman.d/gnupg pacman-key --init && pacman-key --populate && pacman -S --needed --noconfirm …
 ```
+
+`/etc/pacman.conf` has no `NoExtract` lines: packages are installed
+whole, documentation, man pages and translations included, as on Arch
+itself. A recipe that wants less adds `NoExtract` lines in a phase before
+`packages`.
 
 ## Unified kernel image
 

@@ -37,7 +37,13 @@ ARG SOURCE_DATE_EPOCH
 # key, which would then be the same on every machine. The Arch image's
 # keyring goes (its private key is stripped, so it cannot accept new keys
 # anyway). Every pacman step sets up a keyring in a tmpfs instead, see
-# files/pacman-build; recipes keep theirs in a BuildKit cache.
+# files/pacman-build. Recipes need none: recipes/packages.yml installs
+# packages that BuildKit checked against the signed sync database.
+#
+# NoExtract is left open: the Arch image leaves out documentation, man
+# pages and translations; this image installs packages whole, as Arch
+# does, and a recipe that wants less sets NoExtract itself. All packages
+# are installed again, so that the files match pacman.conf.
 RUN rm -rf /etc/pacman.d/gnupg
 RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
     --mount=type=bind,source=files/pacman-build,target=/tmp/pacman-build \
@@ -47,8 +53,11 @@ RUN --mount=type=tmpfs,target=/etc/pacman.d/gnupg \
     sed -i -e '/DownloadUser/d' \
         -e 's/^#\?ParallelDownloads.*/ParallelDownloads = 2/' \
         -e '/^#\?DisableDownloadTimeout/d' \
-        -e '/^\[options\]/a DisableDownloadTimeout' /etc/pacman.conf && \
-    sh /tmp/pacman-build -Syyuu --noconfirm
+        -e '/^[[:space:]]*NoExtract[[:space:]]*=/d' \
+        -e '0,/^\[options\]/s//[options]\nDisableDownloadTimeout/' /etc/pacman.conf && \
+    ! grep -q '^[[:space:]]*NoExtract' /etc/pacman.conf && \
+    sh /tmp/pacman-build -Syyuu --noconfirm && \
+    sh /tmp/pacman-build -S --noconfirm $(pacman -Qqn)
 
 # --- bootc, built from source -----------------------------------------------
 FROM base AS bootc-build
