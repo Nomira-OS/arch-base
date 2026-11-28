@@ -9,7 +9,7 @@
 #            packages the groups name, the dependencies the system does
 #            not have yet, and updates of installed packages if the sync
 #            database is newer than they are. Name, URL from the archive
-#            snapshot of the image, sha256 from the signed sync database,
+#            snapshot of the image, sha256 from the sync database,
 #            and pkgbase as the key, so that split packages share a bucket.
 #            The empty cache directory makes pacman print URLs, never a
 #            path in a cache. Packages the system cannot take, such as one
@@ -26,7 +26,9 @@
 #            would without --overwrite (a file there must belong to the
 #            package being upgraded), and the frontend checks the
 #            buckets against each other.
-#   then     a real pacman transaction over all new packages that writes no
+#   then     pacman -Su --needed with the items, from the downloaded
+#            files as its package cache and with downloading forbidden
+#            (XferCommand = /bin/false): a real transaction that writes no
 #            file again (NoExtract = *), except where hooks need one:
 #            database, install scripts and hooks are pacman's own. libalpm
 #            ignores files under NoExtract for path triggers, hence a
@@ -42,12 +44,17 @@
 #            in its bucket like a new package; NoUpgrade = * keeps pacman
 #            from removing the old files it would then not unpack again,
 #            and the files only the old version had are removed
-#            afterwards. Install scripts and hooks see a real upgrade. New
-#            packages that no item named are then marked as dependencies,
-#            as pacman -S would.
+#            afterwards. Install scripts and hooks see a real upgrade, and
+#            install reasons are those of pacman -S.
+#
+#            pacman checks every package against its signature, with a
+#            keyring set up in a tmpfs from archlinux-keyring, without a
+#            keyserver. pacman wants a .sig file next to a cached package;
+#            the signatures come from the sync database (%PGPSIG%), so
+#            nothing is downloaded for them.
 #
 # BuildKit downloads the packages and checks them against the sha256 from
-# the signed database, so pacman does not check signatures again. They are
+# the sync database. They are
 # cached by their sha256 below /var/lib/buildkit, across reboots and base
 # images. Which packages need a new initramfs is not the recipe's
 # business: the hook of the image decides, as on any Arch system.
@@ -76,8 +83,10 @@ build:
         xargs -d '\n' pacman -Qo < /tmp/present 2>&1 | awk -v names="$names"
         '/ is owned by / && index(names, " " $(NF-1) " ") { next } { print "conflict: " $0; bad = 1 } END { exit bad }'; fi
       then: >-
-        run pacman -Qq | sort > /tmp/before &&
+        run --mount=type=tmpfs,target=/etc/pacman.d/gnupg
         for f in /nomira/in/*.db; do if [ -f "$f" ]; then cp "$f" "$(pacman-conf DBPath)/sync/"; fi; done &&
+        pacman-key --init > /dev/null && pacman-key --populate > /dev/null &&
+        sed -i '/^keyserver/d' /etc/pacman.d/gnupg/gpg.conf &&
         hooks="" &&
         for f in /etc/pacman.d/hooks/*.hook; do if [ -f "$f" ]; then hooks="$hooks $f"; fi; done &&
         for f in /usr/share/libalpm/hooks/*.hook; do
@@ -94,16 +103,16 @@ build:
         /^[[:space:]]*Target[[:space:]]*=/ { x = $0; sub(/^[^=]*=[[:space:]]*/, "", x);
         sub(/[[:space:]]+$/, "", x); if (x !~ /^!/) s[++m] = x }
         END { hook() }' $hooks </dev/null)" &&
-        awk -v l="NoExtract = * $neg" -v u="NoUpgrade = * $neg" '{ print } !d && /^\[options\]/ { print l; print u; d = 1 }'
+        awk -v l="NoExtract = * $neg" -v u="NoUpgrade = * $neg"
+        '{ print } !d && /^\[options\]/ { print l; print u; print "XferCommand = /bin/false"; d = 1 }'
         /etc/pacman.conf > /tmp/pacman.conf &&
         echo "NoExtract = * $neg" &&
-        printf '%s\n' /nomira/in/*.pkg.tar.* > /tmp/pkgs &&
-        awk -F/ 'NR == FNR { had[$0]; next } { n = $NF; sub(/\.pkg\.tar.*/, "", n);
-        for (i = 0; i < 3; i++) sub(/-[^-]*$/, "", n); if (n in had) print n }' /tmp/before /tmp/pkgs > /tmp/up &&
+        { pacman -Qqu || true; } > /tmp/up &&
         if [ -s /tmp/up ]; then xargs pacman -Qlq < /tmp/up | sort -u > /tmp/old; fi &&
-        xargs -d '\n' pacman -U --noconfirm --overwrite '*' --config /tmp/pacman.conf < /tmp/pkgs &&
+        mkdir -p /tmp/cache /tmp/sync && for db in "$(pacman-conf DBPath)"/sync/*.db; do bsdtar -xf "$db" -C /tmp/sync; done &&
+        for f in /nomira/in/*.pkg.tar.*; do b="${f##*/}"; p="${b%.pkg.tar*}"; p="${p%-*}";
+        sed -n '/^%PGPSIG%$/{n;p;}' "/tmp/sync/$p/desc" | base64 -d > "/tmp/cache/$b.sig"; done &&
+        pacman -Su --needed --noconfirm --overwrite '*' --config /tmp/pacman.conf
+        --cachedir /nomira/in --cachedir /tmp/cache ${items} &&
         if [ -s /tmp/up ]; then xargs pacman -Qlq < /tmp/up | sort -u | comm -23 /tmp/old - | grep -v '/$' |
-        while IFS= read -r f; do rm -f "$f"; done; fi &&
-        pacman -Sp --nodeps --nodeps --print-format '%n' ${items} | sort -u > /tmp/asked &&
-        deps="$(pacman -Qq | sort | comm -23 - /tmp/before | comm -23 - /tmp/asked)" &&
-        if [ -n "$deps" ]; then pacman -D --asdeps $deps; fi
+        while IFS= read -r f; do rm -f "$f"; done; fi

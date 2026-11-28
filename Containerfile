@@ -37,8 +37,7 @@ ARG SOURCE_DATE_EPOCH
 # key, which would then be the same on every machine. The Arch image's
 # keyring goes (its private key is stripped, so it cannot accept new keys
 # anyway). Every pacman step sets up a keyring in a tmpfs instead, see
-# files/pacman-build. Recipes need none: recipes/packages.yml installs
-# packages that BuildKit checked against the signed sync database.
+# files/pacman-build; recipes/packages.yml does the same.
 #
 # NoExtract is left open: the Arch image leaves out documentation, man
 # pages and translations; this image installs packages whole, as Arch

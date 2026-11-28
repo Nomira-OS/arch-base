@@ -96,9 +96,10 @@ and compares the layers.
 
 Recipes install packages with the part
 [`recipes/packages.yml`](recipes/packages.yml): pacman resolves them,
-BuildKit downloads them and checks them against the sha256 of the signed
-sync database, and pacman unpacks them, in up to 64 layers that only
-change with their own packages. No keyring is needed for that.
+BuildKit downloads them and checks them against the sha256 of the sync
+database, and pacman unpacks them, in up to 64 layers that only change
+with their own packages. The last step checks every package against its
+signature, with a keyring that it sets up in a tmpfs.
 
 The image ships no pacman keyring. A keyring contains a private signing
 key, and one baked into an image is the same key on every machine that

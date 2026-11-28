@@ -18,10 +18,10 @@
 # gives the same image only for the same state of the repositories, which
 # the sync databases in the image record.
 #
-# Trust: the packages are checked against the sha256 in the sync
-# databases, which come from the mirror over HTTPS; Arch does not sign
-# its databases, and pacman -U does not check the signatures of the
-# packages. Use a mirror you trust.
+# Trust: then checks every package against its signature in the sync
+# databases, as pacman -Syu would. Arch does not sign the databases
+# themselves, so a mirror could hold back updates, but not slip in a
+# package that is not signed by Arch.
 imports: [packages.yml]
 build:
   packages:
