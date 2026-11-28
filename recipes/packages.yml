@@ -16,9 +16,12 @@
 #            a system that holds only this bucket. The hook files of the
 #            packages are therefore unpacked after pacman, with bsdtar,
 #            and the hook directory of the system is hidden by a tmpfs.
-#            pacman checks the packages of a bucket against each other;
-#            the frontend checks the buckets.
-#   then     a real pacman transaction over all packages that writes no
+#            pacman checks the packages of a bucket against each other,
+#            each the bucket against the system it runs on, as pacman
+#            would without --overwrite (a file there must belong to the
+#            package being upgraded), and the frontend checks the
+#            buckets against each other.
+#   then     a real pacman transaction over all new packages that writes no
 #            file again (NoExtract = *), except where hooks need one:
 #            database, install scripts and hooks are pacman's own. libalpm
 #            ignores files under NoExtract for path triggers, hence a
@@ -28,7 +31,13 @@
 #            every font package lists: no font, firmware file or module is
 #            written twice. A hook with NeedsTargets gets its targets as
 #            they are. The first NoExtract line is ours, so NoExtract
-#            lines of the system still win.
+#            lines of the system still win. --overwrite '*' only lets
+#            pacman take the files the buckets put in place; each and the
+#            frontend checked them. Packages the system has in another
+#            version are upgraded first in a transaction of their own,
+#            without NoExtract: an upgrade removes the old files and would
+#            not unpack them again. New packages that no item named are
+#            then marked as dependencies, as pacman -S would.
 #
 # BuildKit downloads the packages and checks them against the sha256 from
 # the signed database, so pacman does not check signatures again. They are
@@ -51,12 +60,18 @@ build:
         -U --noconfirm --nodeps --noscriptlet /nomira/in/* &&
         for f in /nomira/in/*; do p="${f##*/}"; p="${p%.pkg.tar*}"; p="${p%-*}";
         if grep -q '^usr/share/libalpm/hooks/.' "/tmp/db/local/$p/files"; then
-        bsdtar -xpf "$f" -C /nomira/out usr/share/libalpm/hooks; fi; done
+        bsdtar -xpf "$f" -C /nomira/out usr/share/libalpm/hooks; fi; done &&
+        cd /nomira/out && find . ! -type d | sed 's|^\./||' | while IFS= read -r f; do
+        if [ -e "/$f" ] || [ -L "/$f" ]; then printf '/%s\n' "$f"; fi; done > /tmp/present &&
+        if [ -s /tmp/present ]; then
+        names=" $(sed -n '/^%NAME%$/{n;p;}' /tmp/db/local/*/desc | tr '\n' ' ')" &&
+        xargs -d '\n' pacman -Qo < /tmp/present 2>&1 | awk -v names="$names"
+        '/ is owned by / && index(names, " " $(NF-1) " ") { next } { print "conflict: " $0; bad = 1 } END { exit bad }'; fi
       then: >-
-        run hooks="" &&
+        run pacman -Qq | sort > /tmp/before && hooks="" &&
         for f in /etc/pacman.d/hooks/*.hook; do if [ -f "$f" ]; then hooks="$hooks $f"; fi; done &&
         for f in /usr/share/libalpm/hooks/*.hook; do
-        if [ ! -e "/etc/pacman.d/hooks/${f##*/}" ]; then hooks="$hooks $f"; fi; done &&
+        if [ -f "$f" ] && [ ! -e "/etc/pacman.d/hooks/${f##*/}" ]; then hooks="$hooks $f"; fi; done &&
         neg="$(awk '
         function section(  i) { if (path) for (i = 1; i <= m; i++) t[++n] = s[i]; m = 0; path = 0 }
         function hook(  i, x) { section(); for (i = 1; i <= n; i++) { x = t[i];
@@ -72,4 +87,10 @@ build:
         awk -v l="NoExtract = * $neg" '{ print } !d && /^\[options\]/ { print l; d = 1 }'
         /etc/pacman.conf > /tmp/pacman.conf &&
         echo "NoExtract = * $neg" &&
-        pacman -U --noconfirm --overwrite '*' --config /tmp/pacman.conf /nomira/in/*
+        printf '%s\n' /nomira/in/* | awk -F/ 'NR == FNR { had[$0]; next } { n = $NF; sub(/\.pkg\.tar.*/, "", n);
+        for (i = 0; i < 3; i++) sub(/-[^-]*$/, "", n); print > (n in had ? "/tmp/up" : "/tmp/new") }' /tmp/before - &&
+        if [ -s /tmp/up ]; then xargs -d '\n' pacman -U --noconfirm --nodeps --nodeps --overwrite '*' < /tmp/up; fi &&
+        if [ -s /tmp/new ]; then xargs -d '\n' pacman -U --noconfirm --overwrite '*' --config /tmp/pacman.conf < /tmp/new; fi &&
+        pacman -Sp --nodeps --nodeps --print-format '%n' ${items} | sort -u > /tmp/asked &&
+        deps="$(pacman -Qq | sort | comm -23 - /tmp/before | comm -23 - /tmp/asked)" &&
+        if [ -n "$deps" ]; then pacman -D --asdeps $deps; fi
